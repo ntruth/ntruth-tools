@@ -1,6 +1,8 @@
 <template>
-  <div class="prefs">
-    <aside class="nav">
+  <div class="app-shell">
+    <ClipboardPanel />
+    <div class="prefs">
+      <aside class="nav">
       <div class="brand">
         <span class="logo">🚀</span>
         <div>
@@ -195,13 +197,15 @@
         </div>
       </section>
     </main>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { useSettingsStore } from "@/stores/settings";
 import ThemeToggle from "@/components/ThemeToggle.vue";
+import ClipboardPanel from "@/features/clipboard/ClipboardPanel.vue";
 
 const settings = useSettingsStore();
 const section = ref<"general" | "features">("general");
@@ -237,6 +241,10 @@ const onFallbackChange = (event: Event) => {
 </script>
 
 <style scoped>
+.app-shell {
+  min-height: 100vh;
+}
+
 .prefs {
   display: grid;
   grid-template-columns: 260px 1fr;
