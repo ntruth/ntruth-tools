@@ -138,6 +138,9 @@ fn show_launcher<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
 
 #[tauri::command]
 fn show_settings<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+  if let Some(launcher) = app.get_window("launcher") {
+    launcher.hide().ok();
+  }
   if let Some(window) = app.get_window("main") {
     window.show().map_err(|err| err.to_string())?;
     window.set_focus().ok();
@@ -305,6 +308,20 @@ fn execute_entry<R: Runtime>(
         .body(translated)
         .show()
         .map_err(|err| err.to_string())?;
+    }
+    entry_id if entry_id.starts_with("web-search") => {
+      if let Some(url) = payload
+        .get("url")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty())
+      {
+        app
+          .shell()
+          .open(url, None)
+          .map_err(|err| err.to_string())?;
+      } else {
+        return Err("缺少有效的搜索地址".into());
+      }
     }
     _ => {
       if let Some(path) = payload.get("path").and_then(|value| value.as_str()) {

@@ -25,20 +25,22 @@ const installed: PluginManifest[] = [
   },
 ];
 
-const invokeMock = vi.fn((cmd: string, payload: Record<string, unknown>) => {
-  switch (cmd) {
-    case "plugin_marketplace":
-      return Promise.resolve(marketplace);
-    case "plugin_installed":
-      return Promise.resolve(installed);
-    case "plugin_install":
-      return Promise.resolve(marketplace[0]);
-    case "plugin_uninstall":
-      return Promise.resolve(null);
-    default:
-      return Promise.resolve(null);
-  }
-});
+const invokeMock = vi.hoisted(() =>
+  vi.fn((cmd: string) => {
+    switch (cmd) {
+      case "plugin_marketplace":
+        return Promise.resolve(marketplace);
+      case "plugin_installed":
+        return Promise.resolve(installed);
+      case "plugin_install":
+        return Promise.resolve(marketplace[0]);
+      case "plugin_uninstall":
+        return Promise.resolve(null);
+      default:
+        return Promise.resolve(null);
+    }
+  })
+);
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: invokeMock,
