@@ -274,7 +274,10 @@ syncSelection();
   background: linear-gradient(180deg, rgba(214, 217, 223, 0.8), rgba(171, 176, 187, 0.95));
   color: rgba(52, 55, 66, 0.75);
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  display: grid;
+  place-items: center;
+  margin-left: 0.5rem;
 }
 
 .clear:hover {

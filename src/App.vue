@@ -217,7 +217,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { useSettingsStore } from "@/stores/settings";
 import ThemeToggle from "@/components/ThemeToggle.vue";
 import ClipboardPanel from "@/features/clipboard/ClipboardPanel.vue";
@@ -397,6 +397,21 @@ const webSearchEngines = [
   { keyword: "amz", description: "搜索 亚马逊 “{query}”" }
 ] as const;
 
+const placeholderMap: Record<Exclude<Section, "general" | "features">, { title: string; description: string }> = {
+  workflows: { title: "工作流", description: "自动化任务与组合动作的集中管理。" },
+  appearance: { title: "外观", description: "自定义主题、字体与窗口展示效果。" },
+  remote: { title: "远程", description: "使用移动端 Alfred Remote 扩展工作流程。" },
+  advanced: { title: "高级", description: "调节索引、兼容性与开发者相关设置。" },
+  powerpack: { title: "Powerpack", description: "管理授权、同步与高级功能解锁。" }
+};
+
+const currentPlaceholder = computed(() => {
+  if (section.value === "general" || section.value === "features") {
+    return null;
+  }
+  return placeholderMap[section.value];
+});
+
 const onToggleGeneral = (key: Parameters<typeof settings.toggleGeneral>[0], event: Event) => {
   const input = event.target as HTMLInputElement;
   settings.toggleGeneral(key, input.checked);
@@ -414,6 +429,7 @@ const onFallbackChange = (event: Event) => {
     .filter(Boolean);
   settings.setFallbacks(value);
 };
+
 </script>
 
 <style scoped>
@@ -657,6 +673,12 @@ const onFallbackChange = (event: Event) => {
   justify-content: space-between;
   gap: 1.5rem;
   align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.setting-toggle input {
+  transform: scale(1.2);
 }
 
 .table-copy h4 {
