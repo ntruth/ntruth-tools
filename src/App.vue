@@ -233,7 +233,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { useSettingsStore } from "@/stores/settings";
 import ThemeToggle from "@/components/ThemeToggle.vue";
 import ClipboardPanel from "@/features/clipboard/ClipboardPanel.vue";
