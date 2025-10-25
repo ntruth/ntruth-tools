@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
-use std::fs;
-use std::path::Path;
 use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -30,36 +30,48 @@ fn normalize(text: &str) -> String {
     .collect::<String>()
 }
 
+fn canonicalize_path(path: &Path) -> PathBuf {
+  path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn resolve_root(path: &Path) -> Option<PathBuf> {
+  if path.exists() {
+    Some(canonicalize_path(path))
+  } else {
+    None
+  }
+}
+
 fn file_entry(path: &Path) -> Option<SearchDocument> {
   let metadata = fs::metadata(path).ok()?;
   let is_app_bundle = metadata.is_dir() && path.extension().map(|ext| ext == "app").unwrap_or(false);
   if !metadata.is_file() && !is_app_bundle {
     return None;
   }
+  let canonical_path = canonicalize_path(path);
   let name = path.file_name()?.to_string_lossy().to_string();
   let modified: DateTime<Utc> = metadata
     .modified()
     .ok()
-    .and_then(|time| time.elapsed().ok())
-    .map(|elapsed| Utc::now() - chrono::Duration::from_std(elapsed).unwrap_or_default())
+    .map(DateTime::<Utc>::from)
     .unwrap_or_else(Utc::now);
 
   Some(SearchDocument {
     id: format!(
       "doc-{}",
-      path
+      canonical_path
         .to_string_lossy()
         .replace(['/', '\\', ' ', '.'], "_")
     ),
     name,
-    path: path.to_string_lossy().to_string(),
+    path: canonical_path.to_string_lossy().to_string(),
     ext: path.extension().map(|ext| ext.to_string_lossy().to_string()),
     size: if metadata.is_file() { metadata.len() } else { 0 },
     modified,
   })
 }
 
-pub fn refresh_index(root: &Path) -> Result<()> {
+fn collect_documents(root: &Path) -> Result<Vec<SearchDocument>> {
   let mut documents = Vec::new();
   for entry in WalkDir::new(root)
     .max_depth(4)
@@ -76,17 +88,25 @@ pub fn refresh_index(root: &Path) -> Result<()> {
 
   documents.sort_by_key(|doc| Reverse(doc.modified));
 
-  let mut index = INDEX.lock();
-  *index = documents;
+  Ok(documents)
+}
+
+pub fn refresh_index(root: &Path) -> Result<()> {
+  if let Some(resolved) = resolve_root(root) {
+    let mut documents = collect_documents(&resolved)?;
+    let mut index = INDEX.lock();
+    index.retain(|doc| {
+      let doc_path = Path::new(&doc.path);
+      !doc_path.starts_with(&resolved)
+    });
+    index.append(&mut documents);
+    index.sort_by_key(|doc| Reverse(doc.modified));
+  }
   Ok(())
 }
 
 pub fn initialize_index(app_dir: &Path) {
-  let mut roots = vec![
-    app_dir.join("docs"),
-    app_dir.join("src"),
-    app_dir.join("src-tauri"),
-  ];
+  let mut roots = vec![app_dir.join("docs"), app_dir.join("src"), app_dir.join("src-tauri")];
 
   #[cfg(target_os = "macos")]
   {
@@ -107,11 +127,19 @@ pub fn initialize_index(app_dir: &Path) {
     }
   }
 
+  let mut aggregated = Vec::new();
   for root in roots {
-    if root.exists() {
-      let _ = refresh_index(&root);
+    if let Some(resolved) = resolve_root(&root) {
+      if let Ok(mut docs) = collect_documents(&resolved) {
+        aggregated.append(&mut docs);
+      }
     }
   }
+
+  aggregated.sort_by_key(|doc| Reverse(doc.modified));
+
+  let mut index = INDEX.lock();
+  *index = aggregated;
 }
 
 #[derive(Debug, Serialize, Clone)]

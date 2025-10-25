@@ -40,7 +40,7 @@ describe("useClipboardStore", () => {
     store.setFilter("text");
     store.setSearch("link");
 
-    expect(store.filteredItems.value).toHaveLength(1);
-    expect(store.filteredItems.value[0].tags).toContain("link");
+    expect(store.filteredItems).toHaveLength(1);
+    expect(store.filteredItems[0].tags).toContain("link");
   });
 });
