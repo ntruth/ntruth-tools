@@ -20,6 +20,7 @@ const calculatorEntry = TOOL_ENTRIES.find((item) => item.id === "calculator")!;
 const translatorEntry = TOOL_ENTRIES.find((item) => item.id === "translator")!;
 
 const translationCache = new Map<string, string>();
+const FALLBACK_ICON = "🌍";
 interface BackendSearchResult {
   document: {
     id: string;
@@ -96,13 +97,13 @@ const performTranslation = async (payload: TranslationPayload) => {
   }
 
   try {
-    if (isTauri()) {
-      const result = await invoke<string>("translate_text", payload);
-      translationCache.set(cacheKey, result);
-      return result;
-    }
+    const result = await invoke<string>("translate_text", payload);
+    translationCache.set(cacheKey, result);
+    return result;
   } catch (error) {
-    console.warn("Translation fallback triggered", error);
+    if (isTauri()) {
+      console.warn("Translation fallback triggered", error);
+    }
   }
 
   const fallback = translateOffline(payload);
@@ -167,6 +168,7 @@ export const useLauncherSearch = () => {
   const results = ref<LauncherResult[]>([]);
   const fileMatches = ref<LauncherResult[]>([]);
   const baseMatches = ref<LauncherResult[]>([]);
+  const webFallbackMatches = ref<LauncherResult[]>([]);
 
   const context = reactive({
     calculator: null as LauncherResult | null,
@@ -194,6 +196,7 @@ export const useLauncherSearch = () => {
     }
     aggregated.push(...baseMatches.value);
     aggregated.push(...fileMatches.value);
+    aggregated.push(...webFallbackMatches.value);
     results.value = aggregated.slice(0, MAX_RESULTS);
   };
 
@@ -241,6 +244,7 @@ export const useLauncherSearch = () => {
 
     if (!settings.state.features.webSearch) {
       context.translator = null;
+      applyResults();
       return;
     }
 
@@ -273,11 +277,68 @@ export const useLauncherSearch = () => {
     }
   };
 
+  const resolveWebFallbacks = (value: string) => {
+    if (!settings.state.features.webSearch) {
+      webFallbackMatches.value = [];
+      applyResults();
+      return;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      webFallbackMatches.value = [];
+      applyResults();
+      return;
+    }
+
+    const templates = settings.state.webFallbacks.length
+      ? settings.state.webFallbacks
+      : ["https://www.google.com/search?q=%s"];
+
+    const encoded = encodeURIComponent(trimmed);
+    webFallbackMatches.value = templates.map((template, index) => {
+      const url = template.includes("%s")
+        ? template.replace(/%s/g, encoded)
+        : `${template}${template.includes("?") ? "&" : "?"}q=${encoded}`;
+
+      let host: string | undefined;
+      try {
+        const parsed = new URL(url);
+        host = parsed.hostname.replace(/^www\./, "");
+      } catch {
+        host = undefined;
+      }
+
+      return {
+        entry: {
+          id: `web-search-${index}`,
+          label: host ? `使用 ${host} 搜索` : "Web 搜索",
+          description: template,
+          type: "web",
+          keywords: [],
+          icon: FALLBACK_ICON,
+          execute: url
+        },
+        score: 400 - index,
+        badge: host?.toUpperCase(),
+        meta: url,
+        data: {
+          url,
+          template,
+          query: trimmed
+        }
+      } as LauncherResult;
+    });
+
+    applyResults();
+  };
+
   const setQuery = (value: string) => {
     query.value = value;
     const trimmed = value.trim();
     resolveCalculator(trimmed);
     void resolveTranslator(trimmed);
+    resolveWebFallbacks(trimmed);
 
     const coreEntries = settings.state.features.defaultResults
       ? LAUNCHER_ENTRIES
@@ -307,6 +368,7 @@ export const useLauncherSearch = () => {
     query.value = "";
     context.calculator = null;
     context.translator = null;
+    webFallbackMatches.value = [];
     const coreEntries = settings.state.features.defaultResults
       ? LAUNCHER_ENTRIES
       : [];
@@ -321,6 +383,20 @@ export const useLauncherSearch = () => {
   };
 
   clearQuery();
+
+  watch(
+    () => settings.state.webFallbacks.slice(),
+    () => {
+      resolveWebFallbacks(query.value.trim());
+    }
+  );
+
+  watch(
+    () => settings.state.features.webSearch,
+    () => {
+      resolveWebFallbacks(query.value.trim());
+    }
+  );
 
   return {
     query,

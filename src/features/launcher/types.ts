@@ -1,4 +1,4 @@
-export type LauncherResultType = "app" | "tool" | "command" | "file";
+export type LauncherResultType = "app" | "tool" | "command" | "file" | "web";
 
 export interface LauncherEntry {
   id: string;
