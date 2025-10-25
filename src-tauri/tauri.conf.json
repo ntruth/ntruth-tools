@@ -1,0 +1,62 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "UniTools",
+  "version": "0.1.0",
+  "identifier": "com.unitools.desktop",
+  "build": {
+    "devUrl": "tauri://localhost:1420/index.html",
+    "beforeDevCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "UniTools 控制中心",
+        "url": "index.html",
+        "width": 960,
+        "height": 620,
+        "minWidth": 720,
+        "minHeight": 520,
+        "resizable": true,
+        "decorations": true,
+        "visible": false
+      },
+      {
+        "label": "launcher",
+        "title": "UniTools Launcher",
+        "url": "launcher.html",
+        "width": 720,
+        "height": 480,
+        "visible": false,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "windows": {
+      "wix": {
+        "language": "zh-CN"
+      }
+    }
+  },
+  "plugins": {
+    "shell": {},
+    "clipboard": {},
+    "globalShortcut": {},
+    "fs": {},
+    "sql": {},
+    "dialog": null,
+    "notification": null
+  }
+}
