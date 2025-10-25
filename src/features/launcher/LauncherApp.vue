@@ -1,5 +1,5 @@
 <template>
-  <div class="launcher-shell" @keydown="handleShortcut">
+  <div ref="shellRef" class="launcher-shell" @keydown="handleShortcut">
     <header class="search-bar">
       <input
         ref="inputRef"
@@ -42,8 +42,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { useLauncherSearch } from "./useSearch";
 import type { LauncherResult } from "./types";
@@ -52,7 +52,9 @@ const { query, results, setQuery, clearQuery, highlighted } = useLauncherSearch(
 
 const selectedIndex = ref(0);
 const inputRef = ref<HTMLInputElement>();
+const shellRef = ref<HTMLElement>();
 const windowHandle = getCurrentWindow();
+const isTauri = typeof window !== "undefined" && "__TAURI_IPC__" in window;
 
 const syncSelection = () => {
   if (selectedIndex.value >= results.value.length) {
@@ -62,14 +64,6 @@ const syncSelection = () => {
     selectedIndex.value = 0;
   }
 };
-
-watch(results, () => {
-  syncSelection();
-});
-
-watch(query, () => {
-  selectedIndex.value = 0;
-});
 
 const launch = async (item: LauncherResult | null) => {
   if (!item) return;
@@ -101,6 +95,7 @@ const onInput = (event: Event) => {
   const value = (event.target as HTMLInputElement).value;
   setQuery(value);
   selectedIndex.value = 0;
+  void adjustWindowSize();
 };
 
 const clear = () => {
@@ -110,6 +105,7 @@ const clear = () => {
     inputRef.value.focus();
   }
   selectedIndex.value = 0;
+  void adjustWindowSize();
 };
 
 const handleKey = (event: KeyboardEvent) => {
@@ -151,12 +147,54 @@ const handleShortcut = (event: KeyboardEvent) => {
   }
 };
 
+const adjustWindowSize = async () => {
+  if (!isTauri) {
+    return;
+  }
+  await nextTick();
+  const element = shellRef.value;
+  if (!element) {
+    return;
+  }
+  const rect = element.getBoundingClientRect();
+  try {
+    await windowHandle.setSize(new LogicalSize(Math.ceil(rect.width), Math.ceil(rect.height)));
+    await windowHandle.setMinSize(new LogicalSize(Math.ceil(rect.width), Math.ceil(rect.height)));
+  } catch (error) {
+    console.warn("Failed to resize launcher window", error);
+  }
+};
+
+let resizeObserver: ResizeObserver | undefined;
+
+watch(results, async () => {
+  syncSelection();
+  await adjustWindowSize();
+});
+
+watch(query, () => {
+  selectedIndex.value = 0;
+  void adjustWindowSize();
+});
+
 onMounted(() => {
   if (inputRef.value) {
     inputRef.value.focus();
   }
   setQuery(query.value);
   syncSelection();
+  if (typeof ResizeObserver !== "undefined" && shellRef.value && isTauri) {
+    resizeObserver = new ResizeObserver(() => {
+      void adjustWindowSize();
+    });
+    resizeObserver.observe(shellRef.value);
+  } else {
+    void adjustWindowSize();
+  }
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
 });
 
 syncSelection();

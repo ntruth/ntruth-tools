@@ -51,4 +51,17 @@ describe("useLauncherSearch", () => {
     const first = results.value[0];
     expect(first.entry.id).toBe("text-editor");
   });
+
+  it("returns web fallbacks when nothing else matches", () => {
+    const settings = useSettingsStore();
+    settings.state.features.defaultResults = false;
+    settings.state.webFallbacks = ["https://duckduckgo.com/?q=%s"];
+
+    const { setQuery, results } = useLauncherSearch();
+    setQuery("some completely unknown query");
+
+    const fallback = results.value[0];
+    expect(fallback.entry.id).toBe("web-search-0");
+    expect(fallback.meta).toContain("duckduckgo.com");
+  });
 });
