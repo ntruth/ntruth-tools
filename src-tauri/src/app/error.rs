@@ -29,8 +29,17 @@ pub enum AppError {
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
 
+    #[error("Clipboard error: {0}")]
+    Clipboard(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
+}
+
+impl From<tauri_plugin_clipboard_manager::Error> for AppError {
+    fn from(err: tauri_plugin_clipboard_manager::Error) -> Self {
+        AppError::Clipboard(err.to_string())
+    }
 }
 
 impl serde::Serialize for AppError {

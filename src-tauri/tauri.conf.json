@@ -45,6 +45,30 @@
         "skipTaskbar": true,
         "visible": false,
         "focus": true
+      },
+      {
+        "label": "clipboard",
+        "title": "Clipboard History",
+        "url": "/clipboard",
+        "width": 400,
+        "height": 500,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true
+      },
+      {
+        "label": "settings",
+        "title": "OmniBox Settings",
+        "url": "/settings",
+        "width": 900,
+        "height": 600,
+        "center": true,
+        "resizable": true,
+        "visible": false,
+        "decorations": true
       }
     ]
   },
