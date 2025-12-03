@@ -49,6 +49,8 @@ argon2 = "0.5"
 # Utilities
 uuid = { version = "1.6", features = ["v4", "serde"] }
 chrono = "0.4"
+urlencoding = "2.1"
+meval = "0.2"
 
 [features]
 default = ["custom-protocol"]
