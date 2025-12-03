@@ -2,11 +2,10 @@ import { Component, createSignal, createMemo, createEffect } from 'solid-js'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { SearchResult } from '../../types/search'
-import { SearchInput } from '../../components/SearchBox/SearchInput'
-import { ResultList } from '../../components/ResultList/ResultList'
-import { ActionBar } from '../../components/ActionBar/ActionBar'
-import { useKeyboard } from '../../hooks/useKeyboard'
-import { useDebounce } from '../../hooks/useDebounce'
+import { SearchInput } from '../../components/SearchBox'
+import { ResultList } from '../../components/ResultList'
+import { ActionBar } from '../../components/ActionBar'
+import { useKeyboard, useDebounce } from '../../hooks'
 
 /**
  * Main search window component
