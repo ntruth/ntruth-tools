@@ -1,5 +1,6 @@
 // Database module for SQLite operations
 use crate::app::error::{AppError, AppResult};
+use chrono::Utc;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 use std::path::Path;
 
@@ -156,7 +157,7 @@ impl Database {
 
     /// Record file access
     pub async fn record_file_access(&self, file_id: i64) -> AppResult<()> {
-        let now = chrono::Utc::now().timestamp();
+        let now = Utc::now().timestamp();
         sqlx::query(
             r#"
             UPDATE file_index 
@@ -180,7 +181,7 @@ impl Database {
         preview: Option<&str>,
         source_app: Option<&str>,
     ) -> AppResult<i64> {
-        let now = chrono::Utc::now().timestamp();
+        let now = Utc::now().timestamp();
         let result = sqlx::query(
             r#"
             INSERT INTO clipboard_history (content_type, content, preview, source_app, created_at)
@@ -215,25 +216,50 @@ impl Database {
         Ok(entries)
     }
 
-    /// Record app launch
+    /// Record app launch - uses INSERT OR REPLACE for compatibility
     pub async fn record_app_launch(&self, app_path: &str, app_name: &str) -> AppResult<()> {
-        let now = chrono::Utc::now().timestamp();
-        sqlx::query(
-            r#"
-            INSERT INTO app_usage (app_path, app_name, launch_count, last_launched_at)
-            VALUES (?, ?, 1, ?)
-            ON CONFLICT(app_path) DO UPDATE SET
-                launch_count = launch_count + 1,
-                last_launched_at = ?
-            "#,
+        let now = Utc::now().timestamp();
+        
+        // First, try to get existing record
+        let existing: Option<(i64, i64)> = sqlx::query_as(
+            "SELECT id, launch_count FROM app_usage WHERE app_path = ?"
         )
         .bind(app_path)
-        .bind(app_name)
-        .bind(now)
-        .bind(now)
-        .execute(&self.pool)
+        .fetch_optional(&self.pool)
         .await
         .map_err(|e| AppError::Database(e.to_string()))?;
+
+        if let Some((_id, count)) = existing {
+            // Update existing record
+            sqlx::query(
+                r#"
+                UPDATE app_usage 
+                SET launch_count = ?, last_launched_at = ?
+                WHERE app_path = ?
+                "#,
+            )
+            .bind(count + 1)
+            .bind(now)
+            .bind(app_path)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        } else {
+            // Insert new record
+            sqlx::query(
+                r#"
+                INSERT INTO app_usage (app_path, app_name, launch_count, last_launched_at)
+                VALUES (?, ?, 1, ?)
+                "#,
+            )
+            .bind(app_path)
+            .bind(app_name)
+            .bind(now)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        }
+
         Ok(())
     }
 
@@ -244,7 +270,7 @@ impl Database {
         result_type: Option<&str>,
         result_id: Option<&str>,
     ) -> AppResult<()> {
-        let now = chrono::Utc::now().timestamp();
+        let now = Utc::now().timestamp();
         sqlx::query(
             r#"
             INSERT INTO search_history (query, result_type, result_id, searched_at)

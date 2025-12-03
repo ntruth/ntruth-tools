@@ -23,7 +23,7 @@ impl IconCache {
 
         if cache_path.exists() {
             if let Ok(data) = fs::read(&cache_path).await {
-                return Some(base64::encode(&data));
+                return Some(base64::engine::general_purpose::STANDARD.encode(&data));
             }
         }
 
@@ -47,7 +47,9 @@ impl IconCache {
 
     /// Cache an icon as Base64 string
     pub async fn cache_icon_base64(&self, app_path: &Path, base64_data: &str) -> AppResult<()> {
-        let icon_data = base64::decode(base64_data)
+        use base64::Engine;
+        let icon_data = base64::engine::general_purpose::STANDARD
+            .decode(base64_data)
             .map_err(|e| AppError::Unknown(format!("Base64 decode error: {}", e)))?;
         self.cache_icon(app_path, &icon_data).await
     }
@@ -97,7 +99,7 @@ impl IconCache {
         // Extract icon from macOS app bundle
         if let Some(icon_data) = macos::extract_app_icon(app_path).await {
             self.cache_icon(app_path, &icon_data).await?;
-            return Ok(base64::encode(&icon_data));
+            return Ok(base64::engine::general_purpose::STANDARD.encode(&icon_data));
         }
 
         Err(AppError::Unknown("Failed to extract icon".to_string()))
@@ -115,7 +117,7 @@ impl IconCache {
         // Extract icon from Windows executable or shortcut
         if let Some(icon_data) = windows::extract_app_icon(app_path).await {
             self.cache_icon(app_path, &icon_data).await?;
-            return Ok(base64::encode(&icon_data));
+            return Ok(base64::engine::general_purpose::STANDARD.encode(&icon_data));
         }
 
         Err(AppError::Unknown("Failed to extract icon".to_string()))

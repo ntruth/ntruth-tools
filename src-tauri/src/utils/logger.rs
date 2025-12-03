@@ -4,6 +4,7 @@ use tracing::Level;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 /// Initialize the logger with file output and rotation
+/// Note: For production, consider using tracing_appender::rolling for better performance
 pub fn init_logger(log_dir: Option<&Path>, level: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     // Determine log level from parameter or environment variable
     let log_level = level
@@ -29,7 +30,9 @@ pub fn init_logger(log_dir: Option<&Path>, level: Option<&str>) -> Result<(), Bo
         // Create log file path
         let log_file = log_path.join("omnibox.log");
 
-        // Create file appender with rotation
+        // Create file appender
+        // Note: Using basic file appender for simplicity. For high-throughput apps,
+        // consider using tracing_appender::rolling::RollingFileAppender
         let file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
