@@ -1,5 +1,6 @@
 // Icon cache module
 use crate::app::error::{AppError, AppResult};
+use base64::Engine;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
@@ -47,7 +48,6 @@ impl IconCache {
 
     /// Cache an icon as Base64 string
     pub async fn cache_icon_base64(&self, app_path: &Path, base64_data: &str) -> AppResult<()> {
-        use base64::Engine;
         let icon_data = base64::engine::general_purpose::STANDARD
             .decode(base64_data)
             .map_err(|e| AppError::Unknown(format!("Base64 decode error: {}", e)))?;

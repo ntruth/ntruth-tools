@@ -1,5 +1,15 @@
 # Implementation Tests and Verification
 
+## Code Review Notes
+
+### External Crate Usage
+The implementation uses fully qualified paths for external crates:
+- `meval::eval_str()` - Math expression evaluation
+- `base64::engine::general_purpose::STANDARD` - Base64 encoding/decoding (with Engine trait imported)
+- `md5::compute()` - Hash generation for cache keys
+
+These are valid in Rust and will compile correctly since the crates are declared in Cargo.toml. The base64::Engine trait is imported at module level in cache.rs to support the encode/decode methods.
+
 ## Calculator Module Tests
 
 The calculator module includes comprehensive unit tests:
