@@ -1,5 +1,6 @@
 import { Component, Match, Switch, onMount } from 'solid-js'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { MainPage } from './pages/Main'
 
 const App: Component = () => {
   const currentWindow = getCurrentWindow()
@@ -12,9 +13,9 @@ const App: Component = () => {
 
   return (
     <div class="h-screen w-full overflow-hidden">
-      <Switch fallback={<MainWindow />}>
+      <Switch fallback={<MainPage />}>
         <Match when={currentWindow.label === 'main'}>
-          <MainWindow />
+          <MainPage />
         </Match>
         <Match when={currentWindow.label === 'clipboard'}>
           <ClipboardWindow />
@@ -29,26 +30,6 @@ const App: Component = () => {
           <PinWindow />
         </Match>
       </Switch>
-    </div>
-  )
-}
-
-// Main search window
-const MainWindow: Component = () => {
-  return (
-    <div class="flex h-full w-full items-center justify-center bg-white/95 backdrop-blur-lg dark:bg-gray-900/95">
-      <div class="w-full max-w-2xl p-4">
-        <input
-          type="text"
-          placeholder="Search..."
-          class="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-lg outline-none focus:border-primary dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-        />
-        <div class="mt-2 rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-          <div class="p-2 text-center text-gray-500 dark:text-gray-400">
-            No results
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
