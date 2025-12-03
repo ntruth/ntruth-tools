@@ -27,6 +27,7 @@
     }
   },
   "app": {
+    "macOSPrivateApi": true,
     "security": {
       "csp": null
     },
@@ -60,6 +61,19 @@
         "alwaysOnTop": true
       },
       {
+        "label": "ai",
+        "title": "AI Chat",
+        "url": "/ai",
+        "width": 600,
+        "height": 700,
+        "center": true,
+        "resizable": true,
+        "visible": false,
+        "decorations": true,
+        "minWidth": 400,
+        "minHeight": 500
+      },
+      {
         "label": "settings",
         "title": "OmniBox Settings",
         "url": "/settings",
@@ -73,14 +87,6 @@
     ]
   },
   "plugins": {
-    "clipboard-manager": {},
-    "dialog": {},
-    "fs": {
-      "scope": ["$HOME/**"]
-    },
-    "global-shortcut": {},
-    "os": {},
-    "process": {},
     "shell": {
       "open": true
     }

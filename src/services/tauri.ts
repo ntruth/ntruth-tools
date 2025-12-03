@@ -58,11 +58,38 @@ export const systemCommands = {
     return tauriService.invoke('open_path', { path })
   },
   
+  async openUrl(url: string) {
+    return tauriService.invoke('open_url', { url })
+  },
+  
   async showWindow(label: string) {
     return tauriService.invoke('show_window', { label })
   },
   
   async hideWindow(label: string) {
     return tauriService.invoke('hide_window', { label })
+  },
+  
+  async toggleMainWindow() {
+    return tauriService.invoke('toggle_main_window')
+  },
+}
+
+// Clipboard commands
+export const clipboardWindowCommands = {
+  async show() {
+    return tauriService.invoke('show_clipboard_window')
+  },
+  
+  async hide() {
+    return tauriService.invoke('hide_clipboard_window')
+  },
+  
+  async toggleFavorite(id: string) {
+    return tauriService.invoke('toggle_clipboard_favorite', { id })
+  },
+  
+  async deleteItem(id: string) {
+    return tauriService.invoke('delete_clipboard_item', { id })
   },
 }

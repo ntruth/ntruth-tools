@@ -1,4 +1,4 @@
-import { Component, createSignal, createMemo, createEffect } from 'solid-js'
+import { Component, createSignal, createMemo, createEffect, Show } from 'solid-js'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { SearchResult } from '../../types/search'
@@ -73,8 +73,12 @@ export const MainPage: Component = () => {
 
     setLoading(true)
     try {
+      // Check for built-in commands first
+      const builtinResults = getBuiltinResults(q.toLowerCase())
+      
       const searchResults = await invoke<SearchResult[]>('search', { query: q })
-      setResults(searchResults)
+      // Prepend builtin results
+      setResults([...builtinResults, ...searchResults])
       setSelectedIndex(0)
     } catch (error) {
       console.error('Search error:', error)
@@ -83,6 +87,55 @@ export const MainPage: Component = () => {
       setLoading(false)
     }
   })
+
+  // Get builtin command results
+  const getBuiltinResults = (query: string): SearchResult[] => {
+    const builtins: SearchResult[] = []
+    
+    // Settings/Preferences command
+    if ('settings'.includes(query) || 'preferences'.includes(query) || '设置'.includes(query)) {
+      builtins.push({
+        id: 'builtin-settings',
+        title: 'Preferences',
+        subtitle: 'Open OmniBox Settings',
+        icon: '⚙️',
+        category: 'system',
+        path: '',
+        score: 100,
+        action: { type: 'settings' },
+      })
+    }
+    
+    // Clipboard command
+    if ('clipboard'.includes(query) || '剪贴板'.includes(query)) {
+      builtins.push({
+        id: 'builtin-clipboard',
+        title: 'Clipboard History',
+        subtitle: 'View clipboard history (⌘⇧V)',
+        icon: '📋',
+        category: 'system',
+        path: '',
+        score: 100,
+        action: { type: 'clipboard' },
+      })
+    }
+    
+    // AI Chat command
+    if ('ai'.includes(query) || 'chat'.includes(query)) {
+      builtins.push({
+        id: 'builtin-ai',
+        title: 'AI Chat',
+        subtitle: 'Start an AI conversation',
+        icon: '🤖',
+        category: 'system',
+        path: '',
+        score: 100,
+        action: { type: 'ai-query' },
+      })
+    }
+    
+    return builtins
+  }
 
   // Keyboard navigation
   useKeyboard({
@@ -122,32 +175,76 @@ export const MainPage: Component = () => {
 
   // Execute selected result
   const executeResult = async (result: SearchResult) => {
+    console.log('executeResult called with:', result)
+    console.log('action type:', result.action?.type)
     try {
+      // Track if we need to hide the main window manually
+      // (show_window for settings/ai/clipboard already handles hiding main window)
+      let shouldHideManually = true
+      
+      const actionType = result.action?.type
+      console.log('Switching on action type:', actionType)
+      
       // Execute based on action type
-      switch (result.action.type) {
+      switch (actionType) {
         case 'open':
-          await invoke('open_path', { path: result.path })
+          console.log('Opening path:', result.path)
+          // Hide window FIRST before opening app (faster user experience)
+          await hideWindow()
+          shouldHideManually = false
+          // Then open the path
+          invoke('open_path', { path: result.path }).catch(console.error)
           break
         case 'copy':
-          // Copy to clipboard
-          // TODO: Implement clipboard copy
+          // Copy to clipboard using Tauri clipboard API
+          if (result.action.payload) {
+            const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
+            await writeText(result.action.payload)
+          }
           break
         case 'execute':
-          // Execute command
-          // TODO: Implement command execution
+          // Execute command (TODO: implement shell command execution)
+          console.log('Execute command:', result.action.payload)
           break
         case 'web-search':
-          // Open web search
-          await invoke('open_path', { path: result.action.payload })
+          // Hide window FIRST before opening URL (faster user experience)
+          await hideWindow()
+          shouldHideManually = false
+          // Open web search URL
+          if (result.action.payload) {
+            invoke('open_path', { path: result.action.payload }).catch(console.error)
+          }
           break
         case 'ai-query':
-          // Open AI chat
-          await invoke('show_window', { label: 'ai-chat' })
+          // Open AI chat (backend handles hiding main window)
+          await invoke('show_window', { label: 'ai' })
+          shouldHideManually = false
+          break
+        case 'clipboard':
+          // Open clipboard window (backend handles hiding main window)
+          await invoke('show_window', { label: 'clipboard' })
+          shouldHideManually = false
+          break
+        case 'settings':
+          // Open settings window (backend handles hiding main window)
+          await invoke('show_window', { label: 'settings' })
+          shouldHideManually = false
+          break
+        default:
+          console.log('Unknown action type, trying to open path:', result.path)
+          // Fallback: try to open path if available
+          if (result.path) {
+            await hideWindow()
+            shouldHideManually = false
+            invoke('open_path', { path: result.path }).catch(console.error)
+          }
           break
       }
 
-      // Hide window after execution
-      hideWindow()
+      // Hide window after execution (only if not already handled)
+      if (shouldHideManually) {
+        hideWindow()
+      }
     } catch (error) {
       console.error('Execute error:', error)
     }
@@ -169,6 +266,9 @@ export const MainPage: Component = () => {
     setSelectedIndex(0)
   }
 
+  // Whether to show results (only when user has typed something)
+  const showResults = createMemo(() => query().trim().length > 0)
+
   return (
     <div 
       class="flex h-full w-full items-start justify-center pt-32"
@@ -185,18 +285,20 @@ export const MainPage: Component = () => {
           autofocus
         />
 
-        {/* Results List */}
-        <ResultList
-          results={results()}
-          selectedIndex={selectedIndex()}
-          onSelect={setSelectedIndex}
-          onExecute={executeResult}
-          loading={loading()}
-          emptyMessage={query() ? 'No results found' : 'Start typing to search...'}
-        />
+        {/* Results List - Only show when there's a query */}
+        <Show when={showResults()}>
+          <ResultList
+            results={results()}
+            selectedIndex={selectedIndex()}
+            onSelect={setSelectedIndex}
+            onExecute={executeResult}
+            loading={loading()}
+            emptyMessage="No results found"
+          />
 
-        {/* Action Bar */}
-        <ActionBar visible={results().length > 0} />
+          {/* Action Bar */}
+          <ActionBar visible={results().length > 0} />
+        </Show>
       </div>
     </div>
   )

@@ -54,6 +54,29 @@ impl ClipboardContent {
         }
     }
 
+    /// Get plain text (alias for as_plain_text)
+    pub fn plain_text(&self) -> String {
+        self.as_plain_text()
+    }
+
+    /// Check if the content is empty
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Text { content, .. } => content.is_empty(),
+            Self::Html { html, .. } => html.is_empty(),
+            Self::Image { data, .. } => data.is_empty(),
+            Self::Files { paths } => paths.is_empty(),
+        }
+    }
+
+    /// Get the raw data bytes (for images)
+    pub fn data(&self) -> Option<Vec<u8>> {
+        match self {
+            Self::Image { data, .. } => Some(data.clone()),
+            _ => None,
+        }
+    }
+
     /// Get a preview string (limited length)
     pub fn preview(&self, max_len: usize) -> String {
         let text = self.as_plain_text();

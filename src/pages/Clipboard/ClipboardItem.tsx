@@ -4,6 +4,7 @@ import type { ClipboardItemData } from './index'
 
 interface ClipboardItemProps {
   item: ClipboardItemData
+  index: number
   selected: boolean
   onClick: () => void
   onPaste: () => void
@@ -48,37 +49,46 @@ const ClipboardItem: Component<ClipboardItemProps> = (props) => {
   return (
     <div
       class={`cursor-pointer border-b border-gray-200 p-3 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 ${
-        props.selected ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+        props.selected ? 'bg-blue-50 dark:bg-blue-900/30 border-l-2 border-l-blue-500' : ''
       }`}
       onClick={props.onClick}
       onDblClick={props.onPaste}
     >
       <div class="flex items-start justify-between">
-        <div class="flex-1">
+        <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
-            <span class="text-lg">{getTypeIcon(props.item.type)}</span>
-            <div class="flex-1">
-              <div class="text-sm text-gray-900 dark:text-gray-100">
+            {/* Index number for quick access */}
+            {props.index < 9 && (
+              <span class="flex-shrink-0 w-5 h-5 text-xs rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                {props.index + 1}
+              </span>
+            )}
+            <span class="text-lg flex-shrink-0">{getTypeIcon(props.item.type)}</span>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm text-gray-900 dark:text-gray-100 truncate">
                 {truncateContent(props.item.content)}
               </div>
-              <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {formatTime(props.item.timestamp)}
+              <div class="mt-1 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                <span>{formatTime(props.item.timestamp)}</span>
+                {props.item.favorite && (
+                  <Star size={10} class="fill-yellow-500 text-yellow-500" />
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1 ml-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={(e) => {
               e.stopPropagation()
               props.onToggleFavorite()
             }}
-            class="rounded p-1 hover:bg-gray-200 dark:hover:bg-gray-700"
-            title="Toggle favorite"
+            class="rounded p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700"
+            title="Toggle favorite (⌘F)"
           >
             <Star
-              size={16}
+              size={14}
               class={props.item.favorite ? 'fill-yellow-500 text-yellow-500' : 'text-gray-400'}
             />
           </button>
@@ -87,20 +97,20 @@ const ClipboardItem: Component<ClipboardItemProps> = (props) => {
               e.stopPropagation()
               props.onPaste()
             }}
-            class="rounded p-1 hover:bg-gray-200 dark:hover:bg-gray-700"
-            title="Paste"
+            class="rounded p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700"
+            title="Paste (Enter)"
           >
-            <Copy size={16} class="text-gray-600 dark:text-gray-400" />
+            <Copy size={14} class="text-gray-600 dark:text-gray-400" />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation()
               props.onDelete()
             }}
-            class="rounded p-1 hover:bg-gray-200 dark:hover:bg-gray-700"
-            title="Delete"
+            class="rounded p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700"
+            title="Delete (⌘⌫)"
           >
-            <Trash2 size={16} class="text-red-500" />
+            <Trash2 size={14} class="text-red-500" />
           </button>
         </div>
       </div>

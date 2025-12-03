@@ -32,6 +32,21 @@ pub enum AppError {
     #[error("Clipboard error: {0}")]
     Clipboard(String),
 
+    #[error("Shell error: {0}")]
+    Shell(String),
+
+    #[error("Network error: {0}")]
+    Network(String),
+
+    #[error("API error: {0}")]
+    Api(String),
+
+    #[error("Parse error: {0}")]
+    Parse(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }
@@ -39,6 +54,12 @@ pub enum AppError {
 impl From<tauri_plugin_clipboard_manager::Error> for AppError {
     fn from(err: tauri_plugin_clipboard_manager::Error) -> Self {
         AppError::Clipboard(err.to_string())
+    }
+}
+
+impl From<tauri_plugin_shell::Error> for AppError {
+    fn from(err: tauri_plugin_shell::Error) -> Self {
+        AppError::Shell(err.to_string())
     }
 }
 

@@ -1,9 +1,11 @@
 import { Component, JSX } from 'solid-js'
-import { Settings, Palette, Zap } from 'lucide-solid'
+import { Settings, Palette, Zap, Keyboard, FolderSearch, Search, ClipboardList, Camera, Bot, Wrench, Info } from 'lucide-solid'
+
+export type SettingsTab = 'general' | 'features' | 'appearance' | 'shortcuts' | 'indexer' | 'websearch' | 'clipboard' | 'screenshot' | 'ai' | 'advanced' | 'about'
 
 interface LayoutProps {
-  activeTab: 'general' | 'features' | 'appearance'
-  onTabChange: (tab: 'general' | 'features' | 'appearance') => void
+  activeTab: SettingsTab
+  onTabChange: (tab: SettingsTab) => void
   saveStatus: 'idle' | 'saving' | 'saved'
   children: JSX.Element
 }
@@ -13,6 +15,14 @@ const Layout: Component<LayoutProps> = (props) => {
     { id: 'general' as const, label: 'General', icon: Settings },
     { id: 'features' as const, label: 'Features', icon: Zap },
     { id: 'appearance' as const, label: 'Appearance', icon: Palette },
+    { id: 'shortcuts' as const, label: 'Shortcuts', icon: Keyboard },
+    { id: 'clipboard' as const, label: 'Clipboard', icon: ClipboardList },
+    { id: 'indexer' as const, label: 'File Indexer', icon: FolderSearch },
+    { id: 'websearch' as const, label: 'Web Search', icon: Search },
+    { id: 'screenshot' as const, label: 'Screenshot', icon: Camera },
+    { id: 'ai' as const, label: 'AI', icon: Bot },
+    { id: 'advanced' as const, label: 'Advanced', icon: Wrench },
+    { id: 'about' as const, label: 'About', icon: Info },
   ]
 
   return (

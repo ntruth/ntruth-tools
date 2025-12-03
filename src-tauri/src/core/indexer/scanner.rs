@@ -37,6 +37,7 @@ pub struct FileEntry {
     pub id: usize,
     pub path: PathBuf,
     pub name: String,
+    pub display_name: Option<String>,  // Localized display name (for apps)
     pub size: u64,
     pub modified: Option<std::time::SystemTime>,
 }
@@ -118,6 +119,7 @@ impl FileScanner {
                             id: current_id,
                             path: entry_path.clone(),
                             name: name.to_string_lossy().to_string(),
+                            display_name: None,
                             size: metadata.len(),
                             modified: metadata.modified().ok(),
                         });

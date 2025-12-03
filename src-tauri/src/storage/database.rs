@@ -17,12 +17,13 @@ impl Database {
             tokio::fs::create_dir_all(parent).await?;
         }
 
-        // Create connection pool
+        // Create connection pool with create mode
+        let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
-            .connect(&format!("sqlite://{}", db_path.display()))
+            .connect(&db_url)
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .map_err(|e| AppError::Database(format!("Failed to connect to database: {}", e)))?;
 
         let db = Self { pool };
 

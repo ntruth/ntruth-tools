@@ -57,7 +57,6 @@ impl ClipboardWindowManager {
         .inner_size(400.0, 500.0)
         .center()
         .decorations(false)
-        .transparent(true)
         .skip_taskbar(true)
         .always_on_top(true)
         .visible(true)

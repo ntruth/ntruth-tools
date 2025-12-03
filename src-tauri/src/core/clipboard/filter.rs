@@ -1,6 +1,7 @@
 // Sensitive content filtering
 use regex::Regex;
 
+#[derive(Clone)]
 pub struct ContentFilter {
     patterns: Vec<Regex>,
 }

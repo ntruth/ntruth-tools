@@ -7,6 +7,7 @@ interface ResultItemProps {
   isSelected: boolean
   index: number
   onClick: () => void
+  onDoubleClick: () => void
   onMouseEnter: () => void
 }
 
@@ -15,6 +16,10 @@ interface ResultItemProps {
  * Displays icon, title, subtitle with highlighted text and selection state
  */
 export const ResultItem: Component<ResultItemProps> = (props) => {
+  // Check if icon is a data URL (base64 image) or emoji
+  const isDataUrl = () => props.result.icon?.startsWith('data:')
+  const isEmoji = () => props.result.icon && !isDataUrl() && props.result.icon.length <= 4
+
   // Get icon based on result type
   const getIcon = () => {
     switch (props.result.type) {
@@ -46,9 +51,24 @@ export const ResultItem: Component<ResultItemProps> = (props) => {
     return null
   }
 
+  // Render icon based on type (data URL, emoji, or fallback component)
+  const renderIcon = () => {
+    if (isDataUrl()) {
+      // Base64 app icon
+      return <img src={props.result.icon} alt="" class="h-8 w-8 object-contain" />
+    } else if (isEmoji()) {
+      // Emoji icon
+      return <span class="text-2xl">{props.result.icon}</span>
+    } else {
+      // Fallback to component icon
+      return getIcon()
+    }
+  }
+
   return (
     <div
       onClick={props.onClick}
+      onDblClick={props.onDoubleClick}
       onMouseEnter={props.onMouseEnter}
       class="group flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150"
       classList={{
@@ -64,9 +84,7 @@ export const ResultItem: Component<ResultItemProps> = (props) => {
           'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400': !props.isSelected,
         }}
       >
-        <Show when={props.result.icon} fallback={getIcon()}>
-          <img src={props.result.icon} alt="" class="h-6 w-6" />
-        </Show>
+        {renderIcon()}
       </div>
 
       {/* Content */}

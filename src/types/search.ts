@@ -1,11 +1,13 @@
 // Search types
 export interface SearchResult {
   id: string
-  type: SearchResultType
+  type?: SearchResultType
   title: string
   subtitle?: string
   icon?: string
   path?: string
+  category?: string
+  score?: number
   action: SearchAction
   metadata?: Record<string, unknown>
 }
@@ -20,8 +22,8 @@ export type SearchResultType =
   | 'command'
 
 export interface SearchAction {
-  type: 'open' | 'copy' | 'execute' | 'web-search' | 'ai-query'
-  payload?: unknown
+  type: 'open' | 'copy' | 'execute' | 'web-search' | 'ai-query' | 'clipboard' | 'settings' | 'none'
+  payload?: string
 }
 
 export interface SearchState {

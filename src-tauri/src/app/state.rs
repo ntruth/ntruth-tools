@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 /// Global application state
 #[derive(Clone)]
 pub struct AppState {
-    pub app_handle: AppHandle,
+    app_handle: AppHandle,
     pub config: Arc<RwLock<AppConfig>>,
     pub indexer: Arc<Indexer>,
     pub db: Arc<Database>,
@@ -32,6 +32,11 @@ impl AppState {
             .path()
             .app_data_dir()
             .map_err(|e| crate::app::error::AppError::Unknown(format!("Failed to get app data dir: {}", e)))?;
+
+        // Create app data directory if it doesn't exist
+        if !app_data_dir.exists() {
+            std::fs::create_dir_all(&app_data_dir)?;
+        }
 
         // Initialize database
         let db_path = app_data_dir.join("omnibox.db");
@@ -91,6 +96,68 @@ impl AppState {
             }
         }
         
+        // Index macOS Applications with display names (for Chinese search support)
+        #[cfg(target_os = "macos")]
+        {
+            use crate::platform::macos::scan_apps_with_display_names;
+            
+            // Scan all applications with their display names
+            let apps = scan_apps_with_display_names().await;
+            let mut indexed_count = 0;
+            
+            for app in apps {
+                // Use display_name if different from file name
+                let display_name = if app.display_name != app.name && !app.display_name.is_empty() {
+                    Some(app.display_name)
+                } else {
+                    None
+                };
+                
+                if let Err(e) = self.indexer.add_file_with_display_name(&app.path, display_name).await {
+                    // Ignore "already indexed" errors
+                    if !e.contains("already indexed") {
+                        tracing::debug!("Failed to index app {:?}: {}", app.path, e);
+                    }
+                } else {
+                    indexed_count += 1;
+                }
+            }
+            
+            tracing::info!("Indexed {} applications with display names", indexed_count);
+        }
+        
+        tracing::info!("Indexing completed, total files: {}", self.indexer.file_count().await);
+        Ok(())
+    }
+    
+    /// Index applications from a directory (macOS .app bundles) - legacy method
+    #[cfg(target_os = "macos")]
+    async fn index_applications(&self, dir: &std::path::Path) -> AppResult<()> {
+        use tokio::fs;
+        
+        let mut entries = fs::read_dir(dir).await?;
+        let mut count = 0;
+        
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            
+            // Only process .app bundles
+            if let Some(ext) = path.extension() {
+                if ext == "app" {
+                    // Add the .app bundle itself to the index
+                    if let Err(e) = self.indexer.add_file(&path).await {
+                        // Ignore "already indexed" errors
+                        if !e.contains("already indexed") {
+                            tracing::debug!("Failed to index app {:?}: {}", path, e);
+                        }
+                    } else {
+                        count += 1;
+                    }
+                }
+            }
+        }
+        
+        tracing::info!("Indexed {} applications from {:?}", count, dir);
         Ok(())
     }
 
@@ -110,6 +177,11 @@ impl AppState {
         let mut monitor = self.clipboard_monitor.write().await;
         if monitor.is_none() {
             let clipboard_monitor = Arc::new(ClipboardMonitor::new(self.app_handle.clone()));
+            
+            // Set storage for the monitor
+            let storage = self.clipboard_storage().await?;
+            clipboard_monitor.set_storage(storage).await;
+            
             *monitor = Some(clipboard_monitor.clone());
         }
         Ok(monitor.as_ref().unwrap().clone())

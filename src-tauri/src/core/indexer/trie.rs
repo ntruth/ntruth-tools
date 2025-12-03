@@ -51,6 +51,32 @@ impl Trie {
         }
     }
 
+    /// Remove a word's file ID from the trie
+    pub fn remove(&mut self, word: &str, file_id: usize) {
+        let word_lower = word.to_lowercase();
+        let chars: Vec<char> = word_lower.chars().collect();
+        
+        // Navigate to the node containing this word
+        let mut node = &mut self.root;
+        for ch in &chars {
+            match node.children.get_mut(ch) {
+                Some(child) => node = child,
+                None => return, // Word not found
+            }
+        }
+        
+        // Remove file_id from this node
+        node.file_ids.retain(|&id| id != file_id);
+        
+        // If no more file_ids, mark as not end
+        if node.file_ids.is_empty() {
+            node.is_end = false;
+        }
+        
+        // Note: We don't clean up empty nodes for simplicity
+        // A full implementation would traverse back and remove empty nodes
+    }
+
     /// Search for words with given prefix
     pub fn search_prefix(&self, prefix: &str) -> Vec<usize> {
         let prefix_lower = prefix.to_lowercase();

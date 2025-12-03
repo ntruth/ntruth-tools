@@ -2,7 +2,8 @@ import { Component, Match, Switch, onMount } from 'solid-js'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { MainPage } from './pages/Main'
 import ClipboardPage from './pages/Clipboard'
-import SettingsPage from './pages/Settings'
+import AlfredSettings from './pages/Settings/AlfredSettings'
+import AIPage from './pages/AI'
 
 const App: Component = () => {
   const currentWindow = getCurrentWindow()
@@ -23,26 +24,18 @@ const App: Component = () => {
           <ClipboardPage />
         </Match>
         <Match when={currentWindow.label === 'settings'}>
-          <SettingsPage />
+          <AlfredSettings />
+        </Match>
+        <Match when={currentWindow.label === 'ai'}>
+          <AIPage />
         </Match>
         <Match when={currentWindow.label === 'ai-chat'}>
-          <AIChatWindow />
+          <AIPage />
         </Match>
         <Match when={currentWindow.label.startsWith('pin-')}>
           <PinWindow />
         </Match>
       </Switch>
-    </div>
-  )
-}
-
-// AI chat window
-const AIChatWindow: Component = () => {
-  return (
-    <div class="h-full w-full bg-white dark:bg-gray-900">
-      <div class="p-4">
-        <h2 class="text-lg font-semibold dark:text-white">AI Chat</h2>
-      </div>
     </div>
   )
 }

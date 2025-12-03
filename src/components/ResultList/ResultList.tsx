@@ -75,6 +75,7 @@ export const ResultList: Component<ResultListProps> = (props) => {
                 isSelected={index() === props.selectedIndex}
                 index={index()}
                 onClick={() => props.onExecute(result)}
+                onDoubleClick={() => props.onExecute(result)}
                 onMouseEnter={() => props.onSelect(index())}
               />
             )}

@@ -1,0 +1,1038 @@
+/**
+ * Alfred-style Settings CSS
+ * 
+ * Design based on Alfred 5 Preferences window
+ * - Dark sidebar navigation
+ * - Three-column layout for features
+ * - Native macOS feel
+ */
+
+/* =============================================================================
+   CSS Variables
+   ============================================================================= */
+
+:root {
+  /* Alfred Purple/Dark Theme */
+  --alfred-sidebar-bg: #2d2640;
+  --alfred-sidebar-hover: #3d3650;
+  --alfred-sidebar-active: #4a3d60;
+  --alfred-sidebar-text: #9990a8;
+  --alfred-sidebar-text-active: #ffffff;
+  
+  /* Sub-sidebar (lighter) */
+  --alfred-subsidebar-bg: #1e1a26;
+  --alfred-subsidebar-hover: #2a2632;
+  --alfred-subsidebar-active: #6b5b95;
+  --alfred-subsidebar-border: #3d3650;
+  --alfred-subsidebar-text: #c8c4d0;
+  --alfred-subsidebar-text-secondary: #8a8494;
+  --alfred-subsidebar-text-active: #ffffff;
+  
+  /* Content area */
+  --alfred-content-bg: #1a1620;
+  --alfred-content-text: #e0dce8;
+  --alfred-content-text-secondary: #9990a8;
+  --alfred-content-border: #3d3650;
+  
+  /* Inputs & Controls */
+  --alfred-input-bg: #2a2632;
+  --alfred-input-border: #4a3d60;
+  --alfred-input-focus: #6b5b95;
+  
+  /* Accent colors */
+  --alfred-accent: #6b5b95;
+  --alfred-accent-hover: #7d6ba8;
+  
+  /* Sizes */
+  --alfred-primary-width: 88px;
+  --alfred-sub-width: 220px;
+  --alfred-header-height: 48px;
+}
+
+/* Light mode overrides */
+@media (prefers-color-scheme: light) {
+  :root {
+    --alfred-sidebar-bg: #4a3d60;
+    --alfred-content-bg: #ffffff;
+    --alfred-content-text: #1a1620;
+    --alfred-content-text-secondary: #6b7280;
+    --alfred-content-border: #e5e7eb;
+    --alfred-input-bg: #f9fafb;
+    --alfred-input-border: #d1d5db;
+  }
+}
+
+/* =============================================================================
+   Main Window Container
+   ============================================================================= */
+
+.alfred-settings-window {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  background: var(--alfred-content-bg);
+  color: var(--alfred-content-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* =============================================================================
+   Primary Sidebar (Level 1 - Icon Navigation)
+   ============================================================================= */
+
+.alfred-primary-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--alfred-primary-width);
+  min-width: var(--alfred-primary-width);
+  background: var(--alfred-sidebar-bg);
+  border-right: 1px solid var(--alfred-subsidebar-border);
+}
+
+.alfred-primary-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px;
+  gap: 4px;
+}
+
+.alfred-primary-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--alfred-sidebar-text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.alfred-primary-nav-item:hover {
+  background: var(--alfred-sidebar-hover);
+  color: var(--alfred-sidebar-text-active);
+}
+
+.alfred-primary-nav-item.active {
+  background: var(--alfred-sidebar-active);
+  color: var(--alfred-sidebar-text-active);
+}
+
+.alfred-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.alfred-nav-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.alfred-primary-bottom {
+  margin-top: auto;
+  padding: 8px;
+}
+
+.alfred-divider {
+  height: 1px;
+  background: var(--alfred-subsidebar-border);
+  margin: 8px 4px;
+}
+
+/* =============================================================================
+   Content Area (Right of Primary Sidebar)
+   ============================================================================= */
+
+.alfred-content-area {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* =============================================================================
+   Sub-Sidebar (Level 2 - List Navigation)
+   ============================================================================= */
+
+.alfred-sub-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--alfred-sub-width);
+  min-width: var(--alfred-sub-width);
+  background: var(--alfred-subsidebar-bg);
+  border-right: 1px solid var(--alfred-subsidebar-border);
+}
+
+.alfred-sub-sidebar-header {
+  padding: 12px;
+  border-bottom: 1px solid var(--alfred-subsidebar-border);
+}
+
+.alfred-sub-sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* Sub-navigation items (Features list) */
+.alfred-sub-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--alfred-subsidebar-text);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.alfred-sub-nav-item:hover {
+  background: var(--alfred-subsidebar-hover);
+  color: var(--alfred-subsidebar-text-active);
+}
+
+.alfred-sub-nav-item.active {
+  background: var(--alfred-subsidebar-active);
+  color: var(--alfred-subsidebar-text-active);
+}
+
+.alfred-sub-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--alfred-accent);
+}
+
+.alfred-sub-nav-item.active .alfred-sub-nav-icon {
+  color: var(--alfred-subsidebar-text-active);
+}
+
+.alfred-sub-nav-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.alfred-sub-nav-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alfred-sub-nav-subtitle {
+  font-size: 11px;
+  color: var(--alfred-subsidebar-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alfred-sub-nav-item.active .alfred-sub-nav-subtitle {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* =============================================================================
+   Search Box (in sub-sidebar)
+   ============================================================================= */
+
+.alfred-search-box-wrapper {
+  padding: 8px 12px;
+}
+
+.alfred-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--alfred-input-bg);
+  border: 1px solid var(--alfred-input-border);
+  border-radius: 6px;
+}
+
+.alfred-search-icon {
+  color: var(--alfred-content-text-secondary);
+  flex-shrink: 0;
+}
+
+.alfred-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--alfred-content-text);
+  font-size: 12px;
+  outline: none;
+}
+
+.alfred-search-input::placeholder {
+  color: var(--alfred-content-text-secondary);
+}
+
+/* =============================================================================
+   Workflow Items
+   ============================================================================= */
+
+.alfred-workflow-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--alfred-subsidebar-text);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.alfred-workflow-item:hover {
+  background: var(--alfred-subsidebar-hover);
+  color: var(--alfred-subsidebar-text-active);
+}
+
+.alfred-workflow-item.active {
+  background: var(--alfred-subsidebar-active);
+  color: var(--alfred-subsidebar-text-active);
+}
+
+.alfred-workflow-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--alfred-input-bg);
+  border-radius: 6px;
+  color: var(--alfred-accent);
+}
+
+.alfred-workflow-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.alfred-workflow-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: inherit;
+}
+
+.alfred-workflow-author {
+  font-size: 11px;
+  color: var(--alfred-subsidebar-text-secondary);
+}
+
+.alfred-workflow-item.active .alfred-workflow-author {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* =============================================================================
+   Conversation Items (AI History)
+   ============================================================================= */
+
+.alfred-new-chat-btn {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--alfred-accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.alfred-new-chat-btn:hover {
+  background: var(--alfred-accent-hover);
+}
+
+.alfred-conversation-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--alfred-subsidebar-text);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.alfred-conversation-item:hover {
+  background: var(--alfred-subsidebar-hover);
+  color: var(--alfred-subsidebar-text-active);
+}
+
+.alfred-conversation-item.active {
+  background: var(--alfred-subsidebar-active);
+  color: var(--alfred-subsidebar-text-active);
+}
+
+.alfred-conversation-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--alfred-accent);
+}
+
+.alfred-conversation-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.alfred-conversation-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alfred-conversation-date {
+  font-size: 11px;
+  color: var(--alfred-subsidebar-text-secondary);
+}
+
+.alfred-conversation-item.active .alfred-conversation-date {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* =============================================================================
+   Detail Panel (Main Content Area)
+   ============================================================================= */
+
+.alfred-detail-panel,
+.alfred-single-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.alfred-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--alfred-content-border);
+  background: var(--alfred-content-bg);
+}
+
+.alfred-detail-header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, var(--alfred-accent), var(--alfred-accent-hover));
+  border-radius: 12px;
+  color: white;
+}
+
+.alfred-detail-header-text {
+  flex: 1;
+}
+
+.alfred-detail-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+
+.alfred-detail-subtitle {
+  font-size: 12px;
+  color: var(--alfred-content-text-secondary);
+  margin: 0;
+}
+
+.alfred-help-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--alfred-input-bg);
+  border: 1px solid var(--alfred-input-border);
+  border-radius: 50%;
+  color: var(--alfred-content-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.alfred-help-btn:hover {
+  background: var(--alfred-input-border);
+}
+
+.alfred-detail-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+/* =============================================================================
+   Form Elements
+   ============================================================================= */
+
+.alfred-form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.alfred-form-row-spaced {
+  justify-content: space-between;
+}
+
+.alfred-form-section {
+  margin-bottom: 20px;
+}
+
+.alfred-form-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--alfred-content-text);
+  min-width: 100px;
+}
+
+.alfred-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px 16px;
+  margin-top: 8px;
+  margin-bottom: 12px;
+}
+
+.alfred-checkbox-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.alfred-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.alfred-checkbox {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--alfred-accent);
+}
+
+.alfred-note {
+  padding: 12px;
+  background: var(--alfred-input-bg);
+  border-radius: 6px;
+  margin: 16px 0;
+}
+
+.alfred-note p {
+  font-size: 12px;
+  color: var(--alfred-content-text-secondary);
+  margin: 0 0 4px 0;
+  line-height: 1.5;
+}
+
+.alfred-note p:last-child {
+  margin-bottom: 0;
+}
+
+.alfred-note-inline {
+  font-size: 12px;
+  color: var(--alfred-content-text-secondary);
+  margin-left: 4px;
+}
+
+/* Paths list */
+.alfred-paths-list {
+  border: 1px solid var(--alfred-input-border);
+  border-radius: 6px;
+  margin: 12px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.alfred-path-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--alfred-input-border);
+  font-size: 12px;
+}
+
+.alfred-path-item:last-child {
+  border-bottom: none;
+}
+
+.alfred-path-icon {
+  flex-shrink: 0;
+}
+
+.alfred-paths-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
+/* Buttons */
+.alfred-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.alfred-btn-primary {
+  background: var(--alfred-accent);
+  color: white;
+}
+
+.alfred-btn-primary:hover:not(:disabled) {
+  background: var(--alfred-accent-hover);
+}
+
+.alfred-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.alfred-btn-secondary {
+  background: var(--alfred-input-bg);
+  color: var(--alfred-content-text);
+  border: 1px solid var(--alfred-input-border);
+}
+
+.alfred-btn-secondary:hover {
+  background: var(--alfred-input-border);
+}
+
+.alfred-btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.alfred-btn-icon {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--alfred-input-bg);
+  border: 1px solid var(--alfred-input-border);
+}
+
+/* Select */
+.alfred-select {
+  padding: 6px 12px;
+  background: var(--alfred-input-bg);
+  border: 1px solid var(--alfred-input-border);
+  border-radius: 6px;
+  color: var(--alfred-content-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.alfred-select:focus {
+  outline: none;
+  border-color: var(--alfred-accent);
+}
+
+.alfred-select-sm {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.alfred-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Input */
+.alfred-input {
+  padding: 6px 12px;
+  background: var(--alfred-input-bg);
+  border: 1px solid var(--alfred-input-border);
+  border-radius: 6px;
+  color: var(--alfred-content-text);
+  font-size: 12px;
+}
+
+.alfred-input:focus {
+  outline: none;
+  border-color: var(--alfred-accent);
+}
+
+.alfred-input-sm {
+  padding: 4px 8px;
+  font-size: 11px;
+  width: 80px;
+}
+
+.alfred-hotkey-input {
+  display: inline-block;
+}
+
+/* Section styling */
+.alfred-settings-section {
+  margin-bottom: 24px;
+}
+
+.alfred-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+}
+
+.alfred-section-desc {
+  font-size: 12px;
+  color: var(--alfred-content-text-secondary);
+  margin: 0 0 12px 0;
+}
+
+/* Feature content */
+.alfred-feature-content {
+  padding: 0;
+}
+
+.alfred-placeholder {
+  padding: 40px;
+  text-align: center;
+  color: var(--alfred-content-text-secondary);
+}
+
+/* =============================================================================
+   Workflow Panel
+   ============================================================================= */
+
+.alfred-workflow-panel {
+  background: var(--alfred-subsidebar-bg);
+}
+
+.alfred-workflow-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.alfred-workflow-canvas {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.alfred-workflow-canvas-empty {
+  color: var(--alfred-content-text-secondary);
+  font-size: 14px;
+}
+
+.alfred-workflow-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.alfred-empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 400px;
+}
+
+.alfred-empty-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--alfred-input-bg);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.alfred-empty-item:hover {
+  background: var(--alfred-subsidebar-hover);
+}
+
+.alfred-empty-icon {
+  font-size: 24px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--alfred-subsidebar-bg);
+  border-radius: 8px;
+}
+
+.alfred-empty-text h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+
+.alfred-empty-text p {
+  font-size: 12px;
+  color: var(--alfred-content-text-secondary);
+  margin: 0;
+}
+
+/* =============================================================================
+   AI Panel
+   ============================================================================= */
+
+.alfred-ai-panel {
+  background: var(--alfred-content-bg);
+}
+
+.alfred-ai-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.alfred-ai-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--alfred-content-border);
+}
+
+.alfred-ai-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.alfred-ai-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.alfred-ai-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: var(--alfred-content-text-secondary);
+}
+
+.alfred-ai-welcome-icon {
+  margin-bottom: 16px;
+  color: var(--alfred-accent);
+}
+
+.alfred-ai-welcome h4 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: var(--alfred-content-text);
+}
+
+.alfred-ai-welcome p {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* Messages */
+.alfred-ai-message {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.alfred-ai-message-user {
+  justify-content: flex-end;
+}
+
+.alfred-ai-message-user .alfred-ai-message-content {
+  background: var(--alfred-accent);
+  color: white;
+  border-radius: 16px 16px 4px 16px;
+}
+
+.alfred-ai-message-assistant .alfred-ai-message-content {
+  background: var(--alfred-input-bg);
+  border-radius: 16px 16px 16px 4px;
+}
+
+.alfred-ai-message-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--alfred-accent);
+  border-radius: 50%;
+  color: white;
+  flex-shrink: 0;
+}
+
+.alfred-ai-message-content {
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 70%;
+}
+
+.alfred-ai-message-content ul {
+  margin: 8px 0 0 0;
+  padding-left: 20px;
+}
+
+.alfred-ai-message-content li {
+  margin-bottom: 4px;
+}
+
+/* Input Area */
+.alfred-ai-input-area {
+  padding: 16px 24px 24px;
+  border-top: 1px solid var(--alfred-content-border);
+}
+
+.alfred-ai-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--alfred-input-bg);
+  border: 1px solid var(--alfred-input-border);
+  border-radius: 12px;
+  color: var(--alfred-content-text);
+  font-size: 13px;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+}
+
+.alfred-ai-textarea:focus {
+  border-color: var(--alfred-accent);
+}
+
+.alfred-ai-textarea::placeholder {
+  color: var(--alfred-content-text-secondary);
+}
+
+.alfred-ai-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.alfred-ai-model-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alfred-ai-model-label {
+  font-size: 12px;
+  color: var(--alfred-content-text-secondary);
+}
+
+/* =============================================================================
+   Scrollbar Styling
+   ============================================================================= */
+
+.alfred-sub-sidebar-scroll::-webkit-scrollbar,
+.alfred-detail-content::-webkit-scrollbar,
+.alfred-ai-messages::-webkit-scrollbar,
+.alfred-paths-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.alfred-sub-sidebar-scroll::-webkit-scrollbar-track,
+.alfred-detail-content::-webkit-scrollbar-track,
+.alfred-ai-messages::-webkit-scrollbar-track,
+.alfred-paths-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.alfred-sub-sidebar-scroll::-webkit-scrollbar-thumb,
+.alfred-detail-content::-webkit-scrollbar-thumb,
+.alfred-ai-messages::-webkit-scrollbar-thumb,
+.alfred-paths-list::-webkit-scrollbar-thumb {
+  background: var(--alfred-input-border);
+  border-radius: 4px;
+}
+
+.alfred-sub-sidebar-scroll::-webkit-scrollbar-thumb:hover,
+.alfred-detail-content::-webkit-scrollbar-thumb:hover,
+.alfred-ai-messages::-webkit-scrollbar-thumb:hover,
+.alfred-paths-list::-webkit-scrollbar-thumb:hover {
+  background: var(--alfred-content-text-secondary);
+}
+
+/* =============================================================================
+   Responsive Adjustments
+   ============================================================================= */
+
+@media (max-width: 900px) {
+  .alfred-sub-sidebar {
+    width: 180px;
+    min-width: 180px;
+  }
+  
+  .alfred-sub-nav-subtitle {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .alfred-primary-sidebar {
+    width: 60px;
+    min-width: 60px;
+  }
+  
+  .alfred-nav-label {
+    display: none;
+  }
+}
