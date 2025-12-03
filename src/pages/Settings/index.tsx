@@ -102,7 +102,10 @@ const SettingsPage: Component = () => {
     }
   }
 
-  const handleConfigChange = (section: keyof AppConfig, updates: Partial<any>) => {
+  const handleConfigChange = <K extends keyof AppConfig>(
+    section: K,
+    updates: Partial<AppConfig[K]>
+  ) => {
     const current = config()
     if (!current) return
 
