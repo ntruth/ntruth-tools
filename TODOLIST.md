@@ -18,12 +18,12 @@
 ### 项目初始化
 - [x] 创建产品需求文档
 - [x] 创建技术架构设计文档
-- [ ] 初始化 Tauri 2.0 项目
-- [ ] 配置 SolidJS + TypeScript + Vite
-- [ ] 配置 TailwindCSS
-- [ ] 设置项目目录结构
-- [ ] 配置 ESLint + Prettier
-- [ ] 配置 Rust 代码格式化工具
+- [x] 初始化 Tauri 2.0 项目
+- [x] 配置 SolidJS + TypeScript + Vite
+- [x] 配置 TailwindCSS
+- [x] 设置项目目录结构
+- [x] 配置 ESLint + Prettier
+- [x] 配置 Rust 代码格式化工具
 
 ### 基础架构
 - [ ] 实现 AppState 全局状态管理

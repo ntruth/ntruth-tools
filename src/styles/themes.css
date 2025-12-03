@@ -1,0 +1,31 @@
+/* Theme variables */
+:root {
+  /* Light theme */
+  --color-background: #ffffff;
+  --color-surface: #f2f2f7;
+  --color-primary: #007aff;
+  --color-text-primary: #000000;
+  --color-text-secondary: #3c3c43;
+  --color-text-tertiary: #8e8e93;
+}
+
+.dark {
+  /* Dark theme */
+  --color-background: #1c1c1e;
+  --color-surface: #2c2c2e;
+  --color-primary: #0a84ff;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #ebebf5;
+  --color-text-tertiary: #8e8e93;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #1c1c1e;
+    --color-surface: #2c2c2e;
+    --color-primary: #0a84ff;
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #ebebf5;
+    --color-text-tertiary: #8e8e93;
+  }
+}
