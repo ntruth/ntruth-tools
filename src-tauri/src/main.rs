@@ -8,7 +8,7 @@ mod platform;
 mod storage;
 mod utils;
 
-use app::{error::AppError, state::AppState};
+use app::state::AppState;
 use commands::*;
 use tauri::Manager;
 
