@@ -8,8 +8,9 @@ mod platform;
 mod storage;
 mod utils;
 
-use app::{error::AppError, state::AppState};
+use app::state::AppState;
 use commands::*;
+use tauri::Manager;
 
 fn main() {
     // Initialize logger
@@ -55,6 +56,9 @@ fn main() {
             // Settings commands
             settings::get_config,
             settings::update_config,
+            settings::reset_config,
+            settings::export_config,
+            settings::import_config,
             // System commands
             system::open_path,
             system::show_window,

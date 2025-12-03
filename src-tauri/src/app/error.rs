@@ -17,6 +17,9 @@ pub enum AppError {
     #[error("Database error: {0}")]
     Database(String),
 
+    #[error("SQLx error: {0}")]
+    Sqlx(#[from] sqlx::Error),
+
     #[error("Configuration error: {0}")]
     Config(String),
 

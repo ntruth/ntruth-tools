@@ -63,28 +63,30 @@ impl AppScanner {
         path: &str,
         apps: &mut Vec<AppInfo>,
     ) -> Result<(), std::io::Error> {
-        let mut entries = fs::read_dir(path).await?;
+        Box::pin(async move {
+            let mut entries = fs::read_dir(path).await?;
 
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            let entry_path = entry.path();
-            let metadata = entry.metadata().await?;
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let entry_path = entry.path();
+                let metadata = entry.metadata().await?;
 
-            if metadata.is_dir() {
-                // Recursively scan subdirectories
-                if let Some(path_str) = entry_path.to_str() {
-                    let _ = Self::scan_directory_recursive(path_str, apps).await;
-                }
-            } else if let Some(extension) = entry_path.extension() {
-                // Check for .lnk (shortcut) files
-                if extension == "lnk" {
-                    if let Some(app_info) = Self::parse_shortcut(&entry_path).await {
-                        apps.push(app_info);
+                if metadata.is_dir() {
+                    // Recursively scan subdirectories
+                    if let Some(path_str) = entry_path.to_str() {
+                        let _ = Self::scan_directory_recursive(path_str, apps).await;
+                    }
+                } else if let Some(extension) = entry_path.extension() {
+                    // Check for .lnk (shortcut) files
+                    if extension == "lnk" {
+                        if let Some(app_info) = Self::parse_shortcut(&entry_path).await {
+                            apps.push(app_info);
+                        }
                     }
                 }
             }
-        }
 
-        Ok(())
+            Ok(())
+        }).await
     }
 
     async fn scan_program_files(path: &str) -> Result<Vec<AppInfo>, std::io::Error> {

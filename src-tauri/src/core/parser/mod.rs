@@ -1,7 +1,10 @@
 // Input parser module
 mod calculator;
+pub mod web_search;
 
 pub use calculator::Calculator;
+pub use web_search::{SearchEngine, builtin_engines, parse_search_trigger, validate_url_template};
+pub use web_search::is_url as is_web_url;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

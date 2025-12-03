@@ -4,10 +4,12 @@ mod trigram;
 mod scanner;
 mod ranker;
 mod watcher;
+mod filter;
 
 pub use scanner::{FileScanner, ScanConfig, FileEntry};
 pub use ranker::{Ranker, FileScore};
 pub use watcher::FileWatcher;
+pub use filter::SearchFilter;
 
 use trie::Trie;
 use trigram::TrigramIndex;
