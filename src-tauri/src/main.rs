@@ -50,6 +50,10 @@ fn main() {
             // Clipboard commands
             clipboard::get_clipboard_history,
             clipboard::paste_clipboard_item,
+            clipboard::toggle_clipboard_favorite,
+            clipboard::delete_clipboard_item,
+            clipboard::show_clipboard_window,
+            clipboard::hide_clipboard_window,
             // AI commands
             ai::ai_chat,
             ai::get_ai_conversations,

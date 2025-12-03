@@ -1,5 +1,6 @@
 use super::config::AppConfig;
 use super::error::AppResult;
+use crate::core::clipboard::{ClipboardMonitor, ClipboardStorage, ClipboardWindowManager};
 use crate::core::indexer::{Indexer, ScanConfig};
 use crate::storage::{Database, IconCache};
 use std::sync::Arc;
@@ -14,6 +15,9 @@ pub struct AppState {
     pub indexer: Arc<Indexer>,
     pub db: Arc<Database>,
     pub icon_cache: Arc<IconCache>,
+    clipboard_storage: Arc<RwLock<Option<Arc<ClipboardStorage>>>>,
+    clipboard_monitor: Arc<RwLock<Option<Arc<ClipboardMonitor>>>>,
+    clipboard_window_manager: Arc<RwLock<Option<Arc<ClipboardWindowManager>>>>,
 }
 
 impl AppState {
@@ -51,6 +55,9 @@ impl AppState {
             indexer,
             db,
             icon_cache,
+            clipboard_storage: Arc::new(RwLock::new(None)),
+            clipboard_monitor: Arc::new(RwLock::new(None)),
+            clipboard_window_manager: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -85,5 +92,41 @@ impl AppState {
         }
         
         Ok(())
+    }
+
+    /// Get or create clipboard storage
+    pub async fn clipboard_storage(&self) -> AppResult<Arc<ClipboardStorage>> {
+        let mut storage = self.clipboard_storage.write().await;
+        if storage.is_none() {
+            let pool = self.db.pool().clone();
+            let clipboard_storage = Arc::new(ClipboardStorage::new(pool).await?);
+            *storage = Some(clipboard_storage.clone());
+        }
+        Ok(storage.as_ref().unwrap().clone())
+    }
+
+    /// Get or create clipboard monitor
+    pub async fn clipboard_monitor(&self) -> AppResult<Arc<ClipboardMonitor>> {
+        let mut monitor = self.clipboard_monitor.write().await;
+        if monitor.is_none() {
+            let clipboard_monitor = Arc::new(ClipboardMonitor::new(self.app_handle.clone()));
+            *monitor = Some(clipboard_monitor.clone());
+        }
+        Ok(monitor.as_ref().unwrap().clone())
+    }
+
+    /// Get or create clipboard window manager
+    pub async fn clipboard_window_manager(&self) -> AppResult<Arc<ClipboardWindowManager>> {
+        let mut manager = self.clipboard_window_manager.write().await;
+        if manager.is_none() {
+            let window_manager = Arc::new(ClipboardWindowManager::new(self.app_handle.clone()));
+            *manager = Some(window_manager.clone());
+        }
+        Ok(manager.as_ref().unwrap().clone())
+    }
+
+    /// Get app handle for Tauri operations
+    pub fn app_handle(&self) -> &AppHandle {
+        &self.app_handle
     }
 }

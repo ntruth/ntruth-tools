@@ -273,4 +273,45 @@ impl ClipboardStorage {
 
         Ok(items)
     }
+
+    /// Get a single item by ID
+    pub async fn get_by_id(&self, id: &str) -> AppResult<Option<ClipboardHistoryItem>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, content_type, content_hash, plain_text, data,
+                   source_app, source_window, is_favorite, is_sensitive,
+                   created_at, accessed_at, access_count
+            FROM clipboard_history
+            WHERE id = ?
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| ClipboardHistoryItem {
+            id: row.get("id"),
+            content_type: row.get("content_type"),
+            content_hash: row.get("content_hash"),
+            plain_text: row.get("plain_text"),
+            data: row.get("data"),
+            source_app: row.get("source_app"),
+            source_window: row.get("source_window"),
+            is_favorite: row.get("is_favorite"),
+            is_sensitive: row.get("is_sensitive"),
+            created_at: row.get("created_at"),
+            accessed_at: row.get("accessed_at"),
+            access_count: row.get("access_count"),
+        }))
+    }
+
+    /// Delete a clipboard item (alias for delete_item)
+    pub async fn delete(&self, id: &str) -> AppResult<()> {
+        self.delete_item(id).await
+    }
+
+    /// Increment access count for an item
+    pub async fn increment_access_count(&self, id: &str) -> AppResult<()> {
+        self.record_access(id).await
+    }
 }
