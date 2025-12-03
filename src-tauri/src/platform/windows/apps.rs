@@ -145,7 +145,7 @@ impl AppScanner {
             .to_string_lossy()
             .to_string();
 
-        // Skip common system executables
+        // Skip common system executables (compute lowercase once)
         let lowercase_name = app_name.to_lowercase();
         if lowercase_name.contains("uninstall")
             || lowercase_name.contains("setup")
@@ -155,7 +155,7 @@ impl AppScanner {
         }
 
         Some(AppInfo {
-            id: format!("app-{}", app_name.to_lowercase().replace(' ', "-")),
+            id: format!("app-{}", lowercase_name.replace(' ', "-")),
             name: app_name,
             path: exe_path.clone(),
             bundle_id: None,

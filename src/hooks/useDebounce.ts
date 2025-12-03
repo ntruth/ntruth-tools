@@ -1,4 +1,4 @@
-import { createSignal, onCleanup } from 'solid-js'
+import { createSignal, onCleanup, createEffect } from 'solid-js'
 
 /**
  * Debounce hook - delays updating a value until after a specified delay
@@ -9,26 +9,16 @@ import { createSignal, onCleanup } from 'solid-js'
 export function useDebounce<T>(value: () => T, delay: number = 150): () => T {
   const [debouncedValue, setDebouncedValue] = createSignal<T>(value())
 
-  // Create effect to update debounced value after delay
-  let timeoutId: NodeJS.Timeout
-
-  const updateValue = () => {
-    clearTimeout(timeoutId)
-    timeoutId = setTimeout(() => {
-      setDebouncedValue(() => value())
+  // Use createEffect to reactively watch for value changes
+  createEffect(() => {
+    const currentValue = value()
+    const timeoutId = setTimeout(() => {
+      setDebouncedValue(() => currentValue)
     }, delay)
-  }
 
-  // Watch for value changes
-  const interval = setInterval(() => {
-    if (value() !== debouncedValue()) {
-      updateValue()
-    }
-  }, 50)
-
-  onCleanup(() => {
-    clearTimeout(timeoutId)
-    clearInterval(interval)
+    onCleanup(() => {
+      clearTimeout(timeoutId)
+    })
   })
 
   return debouncedValue

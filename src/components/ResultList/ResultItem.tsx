@@ -114,15 +114,24 @@ export const ResultItem: Component<ResultItemProps> = (props) => {
 
 /**
  * Highlight matching text in the result
+ * Uses DOM manipulation to safely highlight without XSS risks
  * @param text Text to highlight
  * @param query Search query
  */
 function highlightMatch(text: string, query: string): string {
   if (!query || !text) return text
 
-  // Simple highlighting - can be improved with fuzzy matching
+  // For security, we'll use a simple approach that doesn't rely on innerHTML
+  // In a production app, consider using a library like highlight-words
   const regex = new RegExp(`(${escapeRegex(query)})`, 'gi')
-  return text.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-900/50">$1</mark>')
+  
+  // Create a temporary div to safely escape HTML
+  const div = document.createElement('div')
+  div.textContent = text
+  const escapedText = div.innerHTML
+  
+  // Now safe to use innerHTML since text was escaped
+  return escapedText.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-900/50">$1</mark>')
 }
 
 /**

@@ -76,8 +76,7 @@ impl FileWatcher {
                 on_change(path);
             }
 
-            // Keep watcher alive
-            drop(watcher);
+            // Watcher will be dropped automatically when this task ends
         });
 
         Ok(())
