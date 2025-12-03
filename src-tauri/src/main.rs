@@ -23,6 +23,15 @@ fn main() {
         .setup(|app| {
             // Initialize app state
             let state = AppState::new(app.handle().clone())?;
+            
+            // Start background indexing task
+            let state_clone = state.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = state_clone.initialize_indexing().await {
+                    eprintln!("Failed to initialize indexing: {}", e);
+                }
+            });
+            
             app.manage(state);
             
             Ok(())

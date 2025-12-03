@@ -35,9 +35,24 @@ pub async fn search(
         
         ParseResult::FileOrApp(q) => {
             // Search files using indexer
-            // TODO: Initialize and use indexer from AppState
-            // For now, return empty results
-            Vec::new()
+            let file_entries = state.indexer.search(&q).await;
+            
+            // Convert FileEntry to SearchResult
+            file_entries
+                .into_iter()
+                .map(|entry| SearchResult {
+                    id: entry.id.to_string(),
+                    r#type: "file".to_string(),
+                    title: entry.name.clone(),
+                    subtitle: Some(entry.path.to_string_lossy().to_string()),
+                    icon: None,
+                    path: Some(entry.path.to_string_lossy().to_string()),
+                    action: SearchAction {
+                        r#type: "open".to_string(),
+                        payload: Some(entry.path.to_string_lossy().to_string()),
+                    },
+                })
+                .collect()
         }
         
         ParseResult::Calculator(expr) => {

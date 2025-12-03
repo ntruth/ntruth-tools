@@ -1,10 +1,4 @@
 // Windows-specific implementations
-// TODO: Implement Windows-specific functionality
+pub mod apps;
 
-pub struct WindowsPlatform;
-
-impl WindowsPlatform {
-    pub fn new() -> Self {
-        Self
-    }
-}
+pub use apps::{AppScanner, AppInfo};

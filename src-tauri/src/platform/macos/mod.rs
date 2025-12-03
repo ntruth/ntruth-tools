@@ -1,10 +1,4 @@
 // macOS-specific implementations
-// TODO: Implement macOS-specific functionality
+pub mod apps;
 
-pub struct MacOSPlatform;
-
-impl MacOSPlatform {
-    pub fn new() -> Self {
-        Self
-    }
-}
+pub use apps::{AppScanner, AppInfo};
