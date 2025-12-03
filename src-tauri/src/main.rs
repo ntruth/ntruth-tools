@@ -56,6 +56,9 @@ fn main() {
             // Settings commands
             settings::get_config,
             settings::update_config,
+            settings::reset_config,
+            settings::export_config,
+            settings::import_config,
             // System commands
             system::open_path,
             system::show_window,
