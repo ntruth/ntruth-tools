@@ -1,5 +1,5 @@
 use crate::app::{error::AppResult, state::AppState};
-use crate::core::parser::{Parser, ParseResult};
+use crate::core::parser::{Parser, ParseResult, Calculator};
 use crate::core::indexer::FileEntry;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -56,7 +56,7 @@ pub async fn search(
         }
         
         ParseResult::Calculator(expr) => {
-            // Evaluate calculator expression
+            // Evaluate calculator expression using new Calculator
             match evaluate_expression(&expr) {
                 Ok(result) => vec![SearchResult {
                     id: "calc".to_string(),
@@ -204,11 +204,12 @@ pub async fn calculate(
     })
 }
 
-/// Evaluate a mathematical expression
+/// Evaluate a mathematical expression with unit conversion support
 fn evaluate_expression(expr: &str) -> Result<String, String> {
-    // Try to evaluate using meval
-    match meval::eval_str(expr) {
-        Ok(value) => Ok(format!("{}", value)),
-        Err(e) => Err(format!("Error: {}", e)),
+    let calc = Calculator::new();
+    
+    match calc.evaluate(expr) {
+        Ok(value) => Ok(calc.format_result(value)),
+        Err(e) => Err(e),
     }
 }

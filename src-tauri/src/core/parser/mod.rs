@@ -1,4 +1,8 @@
 // Input parser module
+mod calculator;
+
+pub use calculator::Calculator;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

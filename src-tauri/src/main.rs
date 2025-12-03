@@ -12,6 +12,9 @@ use app::{error::AppError, state::AppState};
 use commands::*;
 
 fn main() {
+    // Initialize logger
+    utils::logger::init_simple_logger();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -21,14 +24,17 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
-            // Initialize app state
-            let state = AppState::new(app.handle().clone())?;
+            // Initialize app state (now async)
+            let app_handle = app.handle().clone();
+            let state = tauri::async_runtime::block_on(async move {
+                AppState::new(app_handle).await
+            })?;
             
             // Start background indexing task
             let state_clone = state.clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = state_clone.initialize_indexing().await {
-                    eprintln!("Failed to initialize indexing: {}", e);
+                    tracing::error!("Failed to initialize indexing: {}", e);
                 }
             });
             
