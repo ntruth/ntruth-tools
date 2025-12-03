@@ -1,7 +1,8 @@
 // Trigram indexing for fuzzy search
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrigramIndex {
     /// Map from trigram to set of file IDs
     index: HashMap<String, HashSet<usize>>,
@@ -66,6 +67,26 @@ impl TrigramIndex {
         for file_ids in self.index.values_mut() {
             file_ids.remove(&file_id);
         }
+    }
+
+    /// Clear the entire index
+    pub fn clear(&mut self) {
+        self.index.clear();
+    }
+
+    /// Get the number of trigrams in the index
+    pub fn trigram_count(&self) -> usize {
+        self.index.len()
+    }
+
+    /// Serialize the index to bytes
+    pub fn serialize(&self) -> Result<Vec<u8>, String> {
+        serde_json::to_vec(self).map_err(|e| format!("Failed to serialize trigram index: {}", e))
+    }
+
+    /// Deserialize the index from bytes
+    pub fn deserialize(data: &[u8]) -> Result<Self, String> {
+        serde_json::from_slice(data).map_err(|e| format!("Failed to deserialize trigram index: {}", e))
     }
 }
 
