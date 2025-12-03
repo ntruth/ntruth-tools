@@ -85,7 +85,7 @@ impl Calculator {
         let to_unit = parts[parts.len() - 1];
 
         // Find which category these units belong to
-        for (category, rates) in &self.conversion_rates {
+        for (_category, rates) in &self.conversion_rates {
             if rates.contains_key(from_unit) && rates.contains_key(to_unit) {
                 let from_rate = rates[from_unit];
                 let to_rate = rates[to_unit];
@@ -127,7 +127,7 @@ impl Calculator {
     }
 
     /// Parse a value and unit string like "100km" or "100 km"
-    fn parse_value_and_unit(&self, s: &str) -> Option<(f64, &str)> {
+    fn parse_value_and_unit<'a>(&self, s: &'a str) -> Option<(f64, &'a str)> {
         let s = s.trim();
 
         // Try to find where the number ends

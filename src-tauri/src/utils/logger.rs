@@ -4,59 +4,26 @@ use tracing::Level;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 /// Initialize the logger with file output and rotation
-/// Note: For production, consider using tracing_appender::rolling for better performance
-pub fn init_logger(log_dir: Option<&Path>, level: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+/// Note: For production, consider using tracing_appender for proper file logging
+pub fn init_logger(_log_dir: Option<&Path>, level: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     // Determine log level from parameter or environment variable
-    let log_level = level
-        .or_else(|| std::env::var("RUST_LOG").ok().as_deref())
-        .unwrap_or("info");
+    let log_level_str = if let Some(lvl) = level {
+        lvl.to_string()
+    } else if let Ok(env_log) = std::env::var("RUST_LOG") {
+        env_log
+    } else {
+        "info".to_string()
+    };
 
     // Create filter
-    let filter = EnvFilter::try_new(log_level)?;
+    let filter = EnvFilter::try_new(&log_level_str)?;
 
-    // Create formatter for console
-    let fmt_layer = fmt::layer()
-        .with_target(true)
-        .with_thread_ids(false)
-        .with_thread_names(false)
-        .with_line_number(true)
-        .with_level(true);
-
-    // If log directory is specified, set up file logging
-    if let Some(log_path) = log_dir {
-        // Ensure log directory exists
-        std::fs::create_dir_all(log_path)?;
-
-        // Create log file path
-        let log_file = log_path.join("omnibox.log");
-
-        // Create file appender
-        // Note: Using basic file appender for simplicity. For high-throughput apps,
-        // consider using tracing_appender::rolling::RollingFileAppender
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_file)?;
-
-        let file_layer = fmt::layer()
-            .with_writer(std::sync::Arc::new(std::sync::Mutex::new(file)))
-            .with_ansi(false)
-            .with_target(true)
-            .with_line_number(true);
-
-        // Combine console and file output
-        tracing_subscriber::registry()
-            .with(filter)
-            .with(fmt_layer)
-            .with(file_layer)
-            .init();
-    } else {
-        // Console only
-        tracing_subscriber::registry()
-            .with(filter)
-            .with(fmt_layer)
-            .init();
-    }
+    // For now, just use console logging (file logging requires tracing_appender)
+    // TODO: Consider using tracing_appender for proper file logging
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer())
+        .init();
 
     Ok(())
 }

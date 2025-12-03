@@ -10,6 +10,7 @@ mod utils;
 
 use app::{error::AppError, state::AppState};
 use commands::*;
+use tauri::Manager;
 
 fn main() {
     // Initialize logger
