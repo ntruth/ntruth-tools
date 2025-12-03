@@ -1,6 +1,7 @@
 use super::config::AppConfig;
 use super::error::AppResult;
 use crate::core::indexer::{Indexer, ScanConfig};
+use crate::storage::{Database, IconCache};
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 use tokio::sync::RwLock;
@@ -11,19 +12,45 @@ pub struct AppState {
     pub app_handle: AppHandle,
     pub config: Arc<RwLock<AppConfig>>,
     pub indexer: Arc<Indexer>,
+    pub db: Arc<Database>,
+    pub icon_cache: Arc<IconCache>,
 }
 
 impl AppState {
-    pub fn new(app_handle: AppHandle) -> AppResult<Self> {
+    pub async fn new(app_handle: AppHandle) -> AppResult<Self> {
         let config = Arc::new(RwLock::new(AppConfig::default()));
         
         // Create indexer with default configuration
         let indexer = Arc::new(Indexer::new(ScanConfig::default()));
 
+        // Get app data directory
+        let app_data_dir = app_handle
+            .path()
+            .app_data_dir()
+            .map_err(|e| crate::app::error::AppError::Unknown(format!("Failed to get app data dir: {}", e)))?;
+
+        // Initialize database
+        let db_path = app_data_dir.join("omnibox.db");
+        let db = Arc::new(
+            Database::new(&db_path)
+                .await
+                .map_err(|e| crate::app::error::AppError::Database(format!("Failed to initialize database: {}", e)))?
+        );
+
+        // Initialize icon cache
+        let cache_dir = app_data_dir.join("icon_cache");
+        let icon_cache = Arc::new(
+            IconCache::new(cache_dir)
+                .await
+                .map_err(|e| crate::app::error::AppError::Unknown(format!("Failed to initialize icon cache: {}", e)))?
+        );
+
         Ok(Self {
             app_handle,
             config,
             indexer,
+            db,
+            icon_cache,
         })
     }
 
