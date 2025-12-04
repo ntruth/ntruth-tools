@@ -5,6 +5,7 @@ import type { SearchResult } from '../../types/search'
 import { SearchInput } from '../../components/SearchBox'
 import { ResultList } from '../../components/ResultList'
 import { ActionBar } from '../../components/ActionBar'
+import { AIChatView } from '../../components/AIChatView'
 import { useKeyboard, useDebounce } from '../../hooks'
 
 /**
@@ -18,6 +19,12 @@ export const MainPage: Component = () => {
   const [results, setResults] = createSignal<SearchResult[]>([])
   const [selectedIndex, setSelectedIndex] = createSignal(0)
   const [loading, setLoading] = createSignal(false)
+  
+  // AI Instant Query State
+  const [aiMode, setAiMode] = createSignal(false)
+  const [aiQueryId, setAiQueryId] = createSignal<string | null>(null)
+  const [aiQuestion, setAiQuestion] = createSignal('')
+  const [aiLoading, setAiLoading] = createSignal(false)
 
   // Debounced query for search
   const debouncedQuery = useDebounce(query, 150)
@@ -61,13 +68,31 @@ export const MainPage: Component = () => {
 
     return undefined
   })
+  
+  // Check if current query is AI mode
+  const isAiQuery = createMemo(() => query().trim().toLowerCase().startsWith('ai '))
+  
+  // Get the AI question without the prefix
+  const getAiQuestionText = () => {
+    const q = query().trim()
+    if (q.toLowerCase().startsWith('ai ')) {
+      return q.slice(3).trim()
+    }
+    return q
+  }
 
+  // Perform search when debounced query changes
   // Perform search when debounced query changes
   createEffect(async () => {
     const q = debouncedQuery()
     if (!q.trim()) {
       setResults([])
       setLoading(false)
+      return
+    }
+    
+    // Don't search if in AI mode
+    if (q.trim().toLowerCase().startsWith('ai ') && aiMode()) {
       return
     }
 
@@ -87,6 +112,34 @@ export const MainPage: Component = () => {
       setLoading(false)
     }
   })
+  
+  // Execute AI instant query
+  const executeAiQuery = async () => {
+    const question = getAiQuestionText()
+    if (!question) return
+    
+    setAiMode(true)
+    setAiQuestion(question)
+    setAiLoading(true)
+    
+    try {
+      const queryId = await invoke<string>('ai_quick_query', { prompt: question })
+      setAiQueryId(queryId)
+    } catch (error) {
+      console.error('AI query error:', error)
+      setAiQueryId(null)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+  
+  // Exit AI mode
+  const exitAiMode = () => {
+    setAiMode(false)
+    setAiQueryId(null)
+    setAiQuestion('')
+    setQuery('')
+  }
 
   // Get builtin command results
   const getBuiltinResults = (query: string): SearchResult[] => {
@@ -140,18 +193,34 @@ export const MainPage: Component = () => {
   // Keyboard navigation
   useKeyboard({
     onArrowUp: () => {
-      setSelectedIndex((prev) => Math.max(0, prev - 1))
+      if (!aiMode()) {
+        setSelectedIndex((prev) => Math.max(0, prev - 1))
+      }
     },
     onArrowDown: () => {
-      setSelectedIndex((prev) => Math.min(results().length - 1, prev + 1))
+      if (!aiMode()) {
+        setSelectedIndex((prev) => Math.min(results().length - 1, prev + 1))
+      }
     },
     onEnter: () => {
+      // If in AI query mode (typing "ai xxx"), execute AI query
+      if (isAiQuery() && !aiMode()) {
+        executeAiQuery()
+        return
+      }
+      
+      // Normal search result execution
       const selected = results()[selectedIndex()]
       if (selected) {
         executeResult(selected)
       }
     },
     onEscape: () => {
+      // If in AI mode, exit AI mode first
+      if (aiMode()) {
+        exitAiMode()
+        return
+      }
       hideWindow()
     },
     onCommand1: () => executeAtIndex(0),
@@ -257,6 +326,10 @@ export const MainPage: Component = () => {
     setQuery('')
     setResults([])
     setSelectedIndex(0)
+    // Also reset AI mode
+    setAiMode(false)
+    setAiQueryId(null)
+    setAiQuestion('')
   }
 
   // Clear search
@@ -264,10 +337,14 @@ export const MainPage: Component = () => {
     setQuery('')
     setResults([])
     setSelectedIndex(0)
+    // Also reset AI mode
+    if (aiMode()) {
+      exitAiMode()
+    }
   }
 
   // Whether to show results (only when user has typed something)
-  const showResults = createMemo(() => query().trim().length > 0)
+  const showResults = createMemo(() => query().trim().length > 0 && !aiMode())
 
   return (
     <div 
@@ -285,7 +362,21 @@ export const MainPage: Component = () => {
           autofocus
         />
 
-        {/* Results List - Only show when there's a query */}
+        {/* AI Chat View - Show when in AI mode */}
+        <Show when={aiMode()}>
+          <div class="mt-4 max-h-96 overflow-y-auto rounded-xl bg-white/80 shadow-lg backdrop-blur-xl dark:bg-gray-800/80">
+            <AIChatView
+              queryId={aiQueryId()}
+              question={aiQuestion()}
+              isLoading={aiLoading()}
+            />
+          </div>
+          <div class="mt-2 text-center text-xs text-gray-500">
+            按 <kbd class="rounded bg-gray-200 px-1.5 py-0.5 dark:bg-gray-700">Esc</kbd> 退出 AI 模式
+          </div>
+        </Show>
+
+        {/* Results List - Only show when there's a query and not in AI mode */}
         <Show when={showResults()}>
           <ResultList
             results={results()}

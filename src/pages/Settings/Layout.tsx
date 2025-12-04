@@ -12,6 +12,8 @@ interface LayoutProps {
 
 const Layout: Component<LayoutProps> = (props) => {
   const tabs = [
+    { id: 'marketplace' as const, label: '插件市场', icon: Store },
+    { id: 'plugins' as const, label: '插件中心', icon: Puzzle },
     { id: 'general' as const, label: 'General', icon: Settings },
     { id: 'features' as const, label: 'Features', icon: Zap },
     { id: 'appearance' as const, label: 'Appearance', icon: Palette },
@@ -21,8 +23,6 @@ const Layout: Component<LayoutProps> = (props) => {
     { id: 'websearch' as const, label: 'Web Search', icon: Search },
     { id: 'screenshot' as const, label: 'Screenshot', icon: Camera },
     { id: 'ai' as const, label: 'AI', icon: Bot },
-    { id: 'plugins' as const, label: 'Plugins', icon: Puzzle },
-    { id: 'marketplace' as const, label: 'Marketplace', icon: Store },
     { id: 'advanced' as const, label: 'Advanced', icon: Wrench },
     { id: 'about' as const, label: 'About', icon: Info },
   ]

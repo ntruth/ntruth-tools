@@ -1,4 +1,4 @@
-import { Component, createSignal, createResource, For, Show, createEffect } from 'solid-js'
+import { Component, createSignal, createResource, For, Show } from 'solid-js'
 import { invoke } from '@tauri-apps/api/core'
 import { 
   Search, 
@@ -8,15 +8,13 @@ import {
   ChevronLeft,
   ExternalLink,
   Check,
-  Shield,
   Package
 } from 'lucide-solid'
 import type { 
   MarketplacePlugin, 
   MarketplaceFilter, 
   MarketplaceResponse,
-  PluginCategory,
-  PluginPermission 
+  PluginCategory
 } from '../../types/plugin'
 
 /**
@@ -28,8 +26,6 @@ export const PluginMarket: Component = () => {
   const [sortBy, setSortBy] = createSignal<'popular' | 'newest' | 'updated' | 'rating'>('popular')
   const [selectedPlugin, setSelectedPlugin] = createSignal<MarketplacePlugin | null>(null)
   const [installing, setInstalling] = createSignal<string | null>(null)
-  const [showPermissionDialog, setShowPermissionDialog] = createSignal(false)
-  const [pendingInstall, setPendingInstall] = createSignal<MarketplacePlugin | null>(null)
 
   // 构建筛选条件
   const buildFilter = (): MarketplaceFilter => ({
@@ -92,32 +88,6 @@ export const PluginMarket: Component = () => {
     } finally {
       setInstalling(null)
     }
-  }
-
-  // 获取权限描述
-  const getPermissionLabel = (permission: PluginPermission) => {
-    const labels: Record<PluginPermission, string> = {
-      'clipboard:read': '读取剪贴板',
-      'clipboard:write': '写入剪贴板',
-      'fs:read': '读取文件',
-      'fs:write': '写入文件',
-      'network': '网络访问',
-      'shell': 'Shell 命令',
-      'notification': '系统通知',
-      'system': '系统信息',
-    }
-    return labels[permission] || permission
-  }
-
-  // 格式化下载量
-  const formatDownloads = (count: number) => {
-    if (count >= 10000) {
-      return `${(count / 10000).toFixed(1)}万`
-    }
-    if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}k`
-    }
-    return count.toString()
   }
 
   return (

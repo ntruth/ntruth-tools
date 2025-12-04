@@ -84,7 +84,7 @@ export interface AppConfig {
 
 const SettingsPage: Component = () => {
   const [config, setConfig] = createSignal<AppConfig | null>(null)
-  const [activeTab, setActiveTab] = createSignal<SettingsTab>('general')
+  const [activeTab, setActiveTab] = createSignal<SettingsTab>('marketplace')
   const [saveStatus, setSaveStatus] = createSignal<'idle' | 'saving' | 'saved'>('idle')
 
   onMount(async () => {

@@ -31,14 +31,16 @@ import {
   HelpCircle,
   Plus,
   Minus,
-  FolderOpen
+  FolderOpen,
+  Store,
+  Puzzle
 } from 'lucide-solid'
 
 // =============================================================================
 // Types
 // =============================================================================
 
-type PrimaryTab = 'general' | 'features' | 'workflows' | 'ai'
+type PrimaryTab = 'marketplace' | 'plugins' | 'general' | 'features' | 'workflows' | 'ai'
 
 type FeatureSubTab = 
   | 'default-results' 
@@ -118,6 +120,8 @@ const primaryNavItems = [
   { id: 'features' as PrimaryTab, label: 'Features', icon: Zap },
   { id: 'workflows' as PrimaryTab, label: 'Workflows', icon: Workflow },
   { id: 'ai' as PrimaryTab, label: 'AI', icon: Bot },
+  { id: 'marketplace' as PrimaryTab, label: '插件市场', icon: Store },
+  { id: 'plugins' as PrimaryTab, label: '插件中心', icon: Puzzle },
 ]
 
 const bottomNavItems = [
@@ -159,9 +163,9 @@ const AlfredSettings: Component = () => {
   const [selectedModel, setSelectedModel] = createSignal('gpt-4')
   const [searchQuery, setSearchQuery] = createSignal('')
 
-  // Load data on mount and reset to General tab
+  // Load data on mount and reset to general tab
   onMount(async () => {
-    // Always reset to General tab when settings window opens
+    // Always reset to general tab when settings window opens
     setActiveTab('general')
     setActiveFeature('default-results')
     
@@ -169,7 +173,7 @@ const AlfredSettings: Component = () => {
     const currentWindow = getCurrentWindow()
     const unlisten = await currentWindow.onFocusChanged(({ payload: focused }) => {
       if (focused) {
-        // Reset to General tab when window gains focus
+        // Reset to general tab when window gains focus
         setActiveTab('general')
       }
     })
@@ -260,6 +264,146 @@ const AlfredSettings: Component = () => {
           Content Area
           ================================================================ */}
       <div class="alfred-content-area">
+        
+        {/* ============================================================
+            Plugin Marketplace Page - Single Column
+            ============================================================ */}
+        <Show when={activeTab() === 'marketplace'}>
+          <div class="alfred-single-column">
+            <div class="alfred-detail-header">
+              <div class="alfred-detail-header-icon">
+                <Store size={28} />
+              </div>
+              <div class="alfred-detail-header-text">
+                <h2 class="alfred-detail-title">插件市场</h2>
+                <p class="alfred-detail-subtitle">发现和安装插件来增强 OmniBox 功能</p>
+              </div>
+              <button class="alfred-help-btn" title="Help">
+                <HelpCircle size={14} />
+              </button>
+            </div>
+            
+            <div class="alfred-detail-content">
+              <div class="alfred-settings-section">
+                <div class="marketplace-search">
+                  <input 
+                    type="text" 
+                    class="alfred-text-input" 
+                    placeholder="搜索插件..."
+                    style={{ width: '100%', 'margin-bottom': '16px' }}
+                  />
+                </div>
+                
+                <div class="marketplace-categories" style={{ display: 'flex', gap: '8px', 'margin-bottom': '16px', 'flex-wrap': 'wrap' }}>
+                  <button class="alfred-checkbox-item" style={{ padding: '6px 12px', 'border-radius': '6px', background: 'var(--alfred-accent)', color: 'white' }}>全部</button>
+                  <button class="alfred-checkbox-item" style={{ padding: '6px 12px', 'border-radius': '6px' }}>搜索增强</button>
+                  <button class="alfred-checkbox-item" style={{ padding: '6px 12px', 'border-radius': '6px' }}>效率工具</button>
+                  <button class="alfred-checkbox-item" style={{ padding: '6px 12px', 'border-radius': '6px' }}>开发工具</button>
+                  <button class="alfred-checkbox-item" style={{ padding: '6px 12px', 'border-radius': '6px' }}>AI 助手</button>
+                </div>
+
+                <div class="marketplace-grid" style={{ display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                  <div class="plugin-card" style={{ padding: '16px', border: '1px solid var(--alfred-border)', 'border-radius': '12px', background: 'var(--alfred-bg)' }}>
+                    <div style={{ display: 'flex', 'align-items': 'center', gap: '12px', 'margin-bottom': '12px' }}>
+                      <div style={{ width: '48px', height: '48px', 'border-radius': '10px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-size': '24px' }}>🔍</div>
+                      <div>
+                        <h4 style={{ margin: '0', 'font-weight': '600' }}>快速翻译</h4>
+                        <p style={{ margin: '0', 'font-size': '12px', color: 'var(--alfred-text-secondary)' }}>v1.2.0 · 1.2k 下载</p>
+                      </div>
+                    </div>
+                    <p style={{ margin: '0 0 12px', 'font-size': '13px', color: 'var(--alfred-text-secondary)' }}>快速翻译选中的文本，支持多语言</p>
+                    <button style={{ width: '100%', padding: '8px', 'border-radius': '6px', background: 'var(--alfred-accent)', color: 'white', border: 'none', cursor: 'pointer' }}>安装</button>
+                  </div>
+                  
+                  <div class="plugin-card" style={{ padding: '16px', border: '1px solid var(--alfred-border)', 'border-radius': '12px', background: 'var(--alfred-bg)' }}>
+                    <div style={{ display: 'flex', 'align-items': 'center', gap: '12px', 'margin-bottom': '12px' }}>
+                      <div style={{ width: '48px', height: '48px', 'border-radius': '10px', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-size': '24px' }}>📝</div>
+                      <div>
+                        <h4 style={{ margin: '0', 'font-weight': '600' }}>Markdown 预览</h4>
+                        <p style={{ margin: '0', 'font-size': '12px', color: 'var(--alfred-text-secondary)' }}>v2.0.1 · 890 下载</p>
+                      </div>
+                    </div>
+                    <p style={{ margin: '0 0 12px', 'font-size': '13px', color: 'var(--alfred-text-secondary)' }}>实时预览 Markdown 文件内容</p>
+                    <button style={{ width: '100%', padding: '8px', 'border-radius': '6px', background: 'var(--alfred-accent)', color: 'white', border: 'none', cursor: 'pointer' }}>安装</button>
+                  </div>
+                  
+                  <div class="plugin-card" style={{ padding: '16px', border: '1px solid var(--alfred-border)', 'border-radius': '12px', background: 'var(--alfred-bg)' }}>
+                    <div style={{ display: 'flex', 'align-items': 'center', gap: '12px', 'margin-bottom': '12px' }}>
+                      <div style={{ width: '48px', height: '48px', 'border-radius': '10px', background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-size': '24px' }}>🤖</div>
+                      <div>
+                        <h4 style={{ margin: '0', 'font-weight': '600' }}>AI 代码助手</h4>
+                        <p style={{ margin: '0', 'font-size': '12px', color: 'var(--alfred-text-secondary)' }}>v1.5.0 · 2.3k 下载</p>
+                      </div>
+                    </div>
+                    <p style={{ margin: '0 0 12px', 'font-size': '13px', color: 'var(--alfred-text-secondary)' }}>智能代码补全和解释</p>
+                    <button style={{ width: '100%', padding: '8px', 'border-radius': '6px', background: 'var(--alfred-accent)', color: 'white', border: 'none', cursor: 'pointer' }}>安装</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Show>
+        
+        {/* ============================================================
+            Plugin Center Page - Single Column
+            ============================================================ */}
+        <Show when={activeTab() === 'plugins'}>
+          <div class="alfred-single-column">
+            <div class="alfred-detail-header">
+              <div class="alfred-detail-header-icon">
+                <Puzzle size={28} />
+              </div>
+              <div class="alfred-detail-header-text">
+                <h2 class="alfred-detail-title">插件中心</h2>
+                <p class="alfred-detail-subtitle">管理已安装的插件</p>
+              </div>
+              <button class="alfred-help-btn" title="Help">
+                <HelpCircle size={14} />
+              </button>
+            </div>
+            
+            <div class="alfred-detail-content">
+              <div class="alfred-settings-section">
+                <h3 class="alfred-section-title">已安装插件</h3>
+                
+                <div class="installed-plugins" style={{ display: 'flex', 'flex-direction': 'column', gap: '12px' }}>
+                  <div class="plugin-item" style={{ display: 'flex', 'align-items': 'center', 'justify-content': 'space-between', padding: '12px 16px', border: '1px solid var(--alfred-border)', 'border-radius': '10px' }}>
+                    <div style={{ display: 'flex', 'align-items': 'center', gap: '12px' }}>
+                      <div style={{ width: '40px', height: '40px', 'border-radius': '8px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-size': '20px' }}>🔍</div>
+                      <div>
+                        <h4 style={{ margin: '0', 'font-weight': '500' }}>快速翻译</h4>
+                        <p style={{ margin: '0', 'font-size': '12px', color: 'var(--alfred-text-secondary)' }}>v1.2.0 · 已启用</p>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button style={{ padding: '6px 12px', 'border-radius': '6px', border: '1px solid var(--alfred-border)', background: 'transparent', cursor: 'pointer' }}>设置</button>
+                      <button style={{ padding: '6px 12px', 'border-radius': '6px', border: '1px solid #ef4444', color: '#ef4444', background: 'transparent', cursor: 'pointer' }}>卸载</button>
+                    </div>
+                  </div>
+                  
+                  <div class="plugin-item" style={{ display: 'flex', 'align-items': 'center', 'justify-content': 'space-between', padding: '12px 16px', border: '1px solid var(--alfred-border)', 'border-radius': '10px', opacity: '0.6' }}>
+                    <div style={{ display: 'flex', 'align-items': 'center', gap: '12px' }}>
+                      <div style={{ width: '40px', height: '40px', 'border-radius': '8px', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-size': '20px' }}>📝</div>
+                      <div>
+                        <h4 style={{ margin: '0', 'font-weight': '500' }}>Markdown 预览</h4>
+                        <p style={{ margin: '0', 'font-size': '12px', color: 'var(--alfred-text-secondary)' }}>v2.0.1 · 已禁用</p>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button style={{ padding: '6px 12px', 'border-radius': '6px', border: '1px solid var(--alfred-border)', background: 'transparent', cursor: 'pointer' }}>启用</button>
+                      <button style={{ padding: '6px 12px', 'border-radius': '6px', border: '1px solid #ef4444', color: '#ef4444', background: 'transparent', cursor: 'pointer' }}>卸载</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="alfred-settings-section" style={{ 'margin-top': '24px' }}>
+                <h3 class="alfred-section-title">插件更新</h3>
+                <p style={{ color: 'var(--alfred-text-secondary)', 'font-size': '13px' }}>所有插件都是最新版本 ✓</p>
+              </div>
+            </div>
+          </div>
+        </Show>
         
         {/* ============================================================
             General Page - Single Column

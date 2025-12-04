@@ -280,3 +280,96 @@ pub async fn get_ai_conversations(
 ) -> AppResult<Vec<AIConversation>> {
     ai_get_conversations(ai_state).await
 }
+
+/// Quick AI query from search box (streaming)
+/// This is a lightweight version for instant answers without conversation history
+#[tauri::command]
+pub async fn ai_quick_query(
+    prompt: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+    ai_state: State<'_, AIState>,
+) -> AppResult<String> {
+    let config = state.config.read().await;
+    let provider_config = AIProviderConfig {
+        provider: config.ai.provider.clone(),
+        api_key: config.ai.api_key.clone(),
+        api_url: config.ai.api_url.clone(),
+        model: config.ai.model.clone(),
+        temperature: config.ai.temperature,
+        max_tokens: config.ai.max_tokens,
+    };
+    drop(config);
+
+    // Validate API key
+    if provider_config.api_key.is_empty() {
+        return Err(crate::app::error::AppError::Config(
+            "API Key not configured. Please set it in Settings > AI.".to_string()
+        ));
+    }
+
+    let client = ai_state.client.read().await;
+    
+    // Build simple message list (no conversation history)
+    let messages = vec![
+        AIMessage {
+            id: "user".to_string(),
+            role: "user".to_string(),
+            content: prompt,
+            timestamp: chrono::Utc::now().timestamp(),
+            attachments: None,
+        }
+    ];
+
+    // Create channel for streaming
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
+    let query_id = uuid::Uuid::new_v4().to_string();
+
+    // Spawn task to handle streaming
+    let provider = client.get_provider(&provider_config.provider);
+    let stream_config = provider_config.clone();
+    let stream_app = app.clone();
+    let stream_query_id = query_id.clone();
+
+    tokio::spawn(async move {
+        let mut full_response = String::new();
+        
+        // Start streaming - emit to main window
+        let _ = stream_app.emit("ai-quick-start", &stream_query_id);
+        
+        if let Err(e) = provider.chat_stream(messages, &stream_config, tx).await {
+            let _ = stream_app.emit("ai-quick-error", serde_json::json!({
+                "id": stream_query_id,
+                "error": e.to_string(),
+            }));
+            return;
+        }
+
+        while let Some(chunk) = rx.recv().await {
+            full_response.push_str(&chunk);
+            let _ = stream_app.emit("ai-quick-chunk", serde_json::json!({
+                "id": stream_query_id,
+                "chunk": chunk,
+                "content": full_response.clone(),
+            }));
+        }
+
+        let _ = stream_app.emit("ai-quick-end", serde_json::json!({
+            "id": stream_query_id,
+            "content": full_response,
+        }));
+    });
+
+    Ok(query_id)
+}
+
+/// Stop an ongoing AI quick query
+#[tauri::command]
+pub async fn ai_quick_stop(
+    query_id: String,
+    app: AppHandle,
+) -> AppResult<()> {
+    // Emit stop signal
+    let _ = app.emit("ai-quick-stop", &query_id);
+    Ok(())
+}

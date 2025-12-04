@@ -109,6 +109,8 @@ fn main() {
             ai::ai_delete_preset,
             ai::ai_get_models,
             ai::get_ai_conversations,
+            ai::ai_quick_query,
+            ai::ai_quick_stop,
             // Plugin commands
             plugin::get_installed_plugins,
             plugin::get_plugin,
