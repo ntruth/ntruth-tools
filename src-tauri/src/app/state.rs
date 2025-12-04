@@ -2,6 +2,7 @@ use super::config::AppConfig;
 use super::error::AppResult;
 use crate::core::clipboard::{ClipboardMonitor, ClipboardStorage, ClipboardWindowManager};
 use crate::core::indexer::{Indexer, ScanConfig};
+use crate::core::plugin::PluginManager;
 use crate::storage::{Database, IconCache};
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
@@ -15,6 +16,7 @@ pub struct AppState {
     pub indexer: Arc<Indexer>,
     pub db: Arc<Database>,
     pub icon_cache: Arc<IconCache>,
+    pub plugin_manager: Arc<RwLock<PluginManager>>,
     clipboard_storage: Arc<RwLock<Option<Arc<ClipboardStorage>>>>,
     clipboard_monitor: Arc<RwLock<Option<Arc<ClipboardMonitor>>>>,
     clipboard_window_manager: Arc<RwLock<Option<Arc<ClipboardWindowManager>>>>,
@@ -54,12 +56,20 @@ impl AppState {
                 .map_err(|e| crate::app::error::AppError::Unknown(format!("Failed to initialize icon cache: {}", e)))?
         );
 
+        // Initialize plugin manager
+        let plugins_dir = app_data_dir.join("plugins");
+        let plugin_manager = PluginManager::new(plugins_dir);
+        if let Err(e) = plugin_manager.init().await {
+            tracing::warn!("Failed to initialize plugin manager: {}", e);
+        }
+
         Ok(Self {
             app_handle,
             config,
             indexer,
             db,
             icon_cache,
+            plugin_manager: Arc::new(RwLock::new(plugin_manager)),
             clipboard_storage: Arc::new(RwLock::new(None)),
             clipboard_monitor: Arc::new(RwLock::new(None)),
             clipboard_window_manager: Arc::new(RwLock::new(None)),

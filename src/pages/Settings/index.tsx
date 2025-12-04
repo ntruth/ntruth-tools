@@ -11,6 +11,8 @@ import Indexer from './Indexer'
 import WebSearch from './WebSearch'
 import Screenshot from './Screenshot'
 import AISettings from './AISettings'
+import { Plugins } from './Plugins'
+import { PluginMarket } from './PluginMarket'
 import Advanced from './Advanced'
 import About from './About'
 
@@ -270,6 +272,8 @@ const SettingsPage: Component = () => {
           onChange={(updates) => handleConfigChange('ai', updates)}
         />
       )}
+      {activeTab() === 'plugins' && <Plugins />}
+      {activeTab() === 'marketplace' && <PluginMarket />}
       {activeTab() === 'advanced' && (
         <Advanced
           onExportConfig={handleExportConfig}

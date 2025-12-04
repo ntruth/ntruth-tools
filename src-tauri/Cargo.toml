@@ -59,6 +59,7 @@ notify = "6.1"
 base64 = "0.21"
 md5 = "0.7"
 regex = "1.10"
+zip = "0.6"
 
 [features]
 default = ["custom-protocol"]

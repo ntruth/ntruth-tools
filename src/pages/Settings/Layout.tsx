@@ -1,7 +1,7 @@
 import { Component, JSX } from 'solid-js'
-import { Settings, Palette, Zap, Keyboard, FolderSearch, Search, ClipboardList, Camera, Bot, Wrench, Info } from 'lucide-solid'
+import { Settings, Palette, Zap, Keyboard, FolderSearch, Search, ClipboardList, Camera, Bot, Wrench, Info, Puzzle, Store } from 'lucide-solid'
 
-export type SettingsTab = 'general' | 'features' | 'appearance' | 'shortcuts' | 'indexer' | 'websearch' | 'clipboard' | 'screenshot' | 'ai' | 'advanced' | 'about'
+export type SettingsTab = 'general' | 'features' | 'appearance' | 'shortcuts' | 'indexer' | 'websearch' | 'clipboard' | 'screenshot' | 'ai' | 'plugins' | 'marketplace' | 'advanced' | 'about'
 
 interface LayoutProps {
   activeTab: SettingsTab
@@ -21,6 +21,8 @@ const Layout: Component<LayoutProps> = (props) => {
     { id: 'websearch' as const, label: 'Web Search', icon: Search },
     { id: 'screenshot' as const, label: 'Screenshot', icon: Camera },
     { id: 'ai' as const, label: 'AI', icon: Bot },
+    { id: 'plugins' as const, label: 'Plugins', icon: Puzzle },
+    { id: 'marketplace' as const, label: 'Marketplace', icon: Store },
     { id: 'advanced' as const, label: 'Advanced', icon: Wrench },
     { id: 'about' as const, label: 'About', icon: Info },
   ]
