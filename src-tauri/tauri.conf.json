@@ -13,7 +13,8 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "libs/Everything64.dll"
+      "libs/Everything64.dll",
+      "icons/*"
     ],
     "icon": [
       "icons/icon.ico",

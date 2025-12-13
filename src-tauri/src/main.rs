@@ -1,15 +1,15 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod app;
-mod commands;
-mod core;
-mod platform;
-mod storage;
-mod utils;
+use omnibox::app;
+use omnibox::commands;
+use omnibox::core;
+use omnibox::platform;
+use omnibox::storage;
+use omnibox::utils;
 
 #[cfg(windows)]
-mod everything;
+use omnibox::everything_service;
 
 use app::state::AppState;
 use commands::*;
@@ -61,12 +61,12 @@ fn main() {
             register_global_shortcuts(app)?;
             
             // ═══════════════════════════════════════════════════════════════════
-            // 4. Initialize Everything search (Windows only)
+            // 4. Initialize Everything Service (Windows only)
             // ═══════════════════════════════════════════════════════════════════
             #[cfg(windows)]
             {
                 let app_handle = app.handle().clone();
-                if let Err(e) = everything::init_everything(&app_handle) {
+                if let Err(e) = everything_service::init_everything(&app_handle) {
                     tracing::warn!("Everything search not available: {}", e);
                 } else {
                     tracing::info!("Everything search initialized successfully");
@@ -113,12 +113,9 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Search commands
+            // Search commands (uses hybrid search: AppIndexer + Everything)
             search::search,
             search::calculate,
-            // Everything search (Windows)
-            #[cfg(windows)]
-            everything::everything_search,
             // Clipboard commands
             clipboard::get_clipboard_history,
             clipboard::paste_clipboard_item,
@@ -185,20 +182,29 @@ fn main() {
 // ═══════════════════════════════════════════════════════════════════════════════
 fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Create tray menu items
-    let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+    let show_item = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
+    let settings_item = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
     let separator = MenuItem::with_id(app, "separator", "───────────", false, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     
     // Build menu
-    let menu = Menu::with_items(app, &[&settings_item, &separator, &quit_item])?;
+    let menu = Menu::with_items(app, &[&show_item, &settings_item, &separator, &quit_item])?;
     
     // Get app handle for event handlers
-    let app_handle_menu = app.handle().clone();
+    let app_handle_for_menu = app.handle().clone();
+    
+    // Load tray icon - use the default window icon from tauri.conf.json
+    // In Tauri 2.0, this is the most reliable way to get the bundled icon
+    let tray_icon = app.default_window_icon()
+        .cloned()
+        .ok_or("No default window icon configured in tauri.conf.json")?;
+    
+    tracing::info!("Loading tray icon from default_window_icon");
     
     // Build tray icon
     let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
-        .tooltip("OmniBox - Press Alt+Space to search")
+        .icon(tray_icon)
+        .tooltip("OmniBox - 按 Alt+Space 打开搜索")
         .menu(&menu)
         .on_tray_icon_event(move |tray, event| {
             match event {
@@ -214,15 +220,26 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                 _ => {}
             }
         })
-        .on_menu_event(move |app, event| {
-            match event.id.as_ref() {
+        .on_menu_event(move |_app, event| {
+            let id = event.id.as_ref();
+            tracing::info!("Tray menu clicked: {}", id);
+            
+            match id {
+                "show" => {
+                    tracing::info!("Tray menu: Show clicked");
+                    if let Some(window) = app_handle_for_menu.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
                 "settings" => {
                     tracing::info!("Tray menu: Settings clicked");
-                    show_settings_window(&app_handle_menu);
+                    show_settings_window(&app_handle_for_menu);
                 }
                 "quit" => {
-                    tracing::info!("Tray menu: Quit clicked");
-                    app.exit(0);
+                    tracing::info!("Tray menu: Quit clicked - exiting application");
+                    // Force exit - this MUST work
+                    std::process::exit(0);
                 }
                 _ => {}
             }

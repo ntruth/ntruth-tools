@@ -4,16 +4,18 @@ import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import type { SearchResult } from '../../types/search'
 import { SearchInput } from '../../components/SearchBox'
 import { ResultList } from '../../components/ResultList'
-import { ActionBar } from '../../components/ActionBar'
 import { AIChatView } from '../../components/AIChatView'
 import { useKeyboard, useDebounce } from '../../hooks'
 
 // Window size constants
-const SEARCH_BAR_HEIGHT = 60
-const RESULT_ITEM_HEIGHT = 48
+const SEARCH_BAR_HEIGHT = 72      // Search input + padding (increased)
+const RESULT_ITEM_HEIGHT = 56     // Each result item (py-2.5 + content)
+const GROUP_HEADER_HEIGHT = 32    // "FILES" / "APPLICATIONS" header
+const FOOTER_HEIGHT = 40          // Bottom action bar (increased)
 const MAX_VISIBLE_RESULTS = 8
 const WINDOW_WIDTH = 680
-const PADDING = 16
+const CONTAINER_MARGIN = 8        // mt-2 gap between search and results
+const WINDOW_PADDING = 16         // p-2 on main container (8px * 2)
 
 /**
  * Main search window component
@@ -33,8 +35,8 @@ export const MainPage: Component = () => {
   const [aiQuestion, setAiQuestion] = createSignal('')
   const [aiLoading, setAiLoading] = createSignal(false)
 
-  // Debounced query for search
-  const debouncedQuery = useDebounce(query, 150)
+  // Debounced query for search (500ms to reduce API calls and prevent request pileup)
+  const debouncedQuery = useDebounce(query, 500)
 
   // Determine input type based on query
   const inputType = createMemo(() => {
@@ -68,8 +70,16 @@ export const MainPage: Component = () => {
     if (q.startsWith('> ')) return 'System Command'
     if (q.startsWith('=') || /^[\d+\-*/().^%\s]+$/.test(q)) return 'Calculator'
 
-    // Check if URL
-    if (/^https?:\/\//.test(q) || /^www\./.test(q) || /\.[a-z]{2,}/.test(q)) {
+    // Check if URL - must be more specific to avoid matching filenames like "file.txt"
+    // Only match if it starts with http/https/www or looks like a domain (word.tld pattern at the start)
+    if (/^https?:\/\//.test(q) || /^www\./.test(q)) {
+      return 'Open URL'
+    }
+    // Check for domain-like patterns: must start with alphanumeric and have common TLD
+    // Avoid matching filenames like "pkg_bsaml.pck" or "document.pdf"
+    const domainTlds = ['com', 'org', 'net', 'io', 'dev', 'cn', 'co', 'app', 'me', 'tv', 'ai']
+    const domainMatch = q.match(/^([a-z0-9-]+)\.([a-z]{2,})$/i)
+    if (domainMatch && domainTlds.includes(domainMatch[2].toLowerCase())) {
       return 'Open URL'
     }
 
@@ -88,10 +98,16 @@ export const MainPage: Component = () => {
     return q
   }
 
+  // Track current search request to cancel stale ones
+  let currentSearchId = 0
+
   // Perform search when debounced query changes
-  // Perform search when debounced query changes
-  createEffect(async () => {
+  createEffect(() => {
     const q = debouncedQuery()
+    
+    // Increment search ID to invalidate previous requests
+    const searchId = ++currentSearchId
+    
     if (!q.trim()) {
       setResults([])
       setLoading(false)
@@ -104,20 +120,30 @@ export const MainPage: Component = () => {
     }
 
     setLoading(true)
-    try {
-      // Check for built-in commands first
-      const builtinResults = getBuiltinResults(q.toLowerCase())
-      
-      const searchResults = await invoke<SearchResult[]>('search', { query: q })
-      // Prepend builtin results
-      setResults([...builtinResults, ...searchResults])
-      setSelectedIndex(0)
-    } catch (error) {
-      console.error('Search error:', error)
-      setResults([])
-    } finally {
-      setLoading(false)
-    }
+    
+    // Check for built-in commands first
+    const builtinResults = getBuiltinResults(q.toLowerCase())
+    
+    // Perform search asynchronously
+    invoke<SearchResult[]>('search', { query: q })
+      .then((searchResults) => {
+        // Only update if this is still the current search
+        if (searchId === currentSearchId) {
+          setResults([...builtinResults, ...searchResults])
+          setSelectedIndex(0)
+        }
+      })
+      .catch((error) => {
+        console.error('Search error:', error)
+        if (searchId === currentSearchId) {
+          setResults(builtinResults)
+        }
+      })
+      .finally(() => {
+        if (searchId === currentSearchId) {
+          setLoading(false)
+        }
+      })
   })
   
   // Execute AI instant query
@@ -359,12 +385,25 @@ export const MainPage: Component = () => {
     const hasResults = showResults() && resultCount > 0
     const isAi = aiMode()
     
-    let newHeight = SEARCH_BAR_HEIGHT + PADDING
+    // Base height: search bar + window padding
+    let newHeight = SEARCH_BAR_HEIGHT + WINDOW_PADDING
     
     if (hasResults) {
-      // Calculate height based on result count (max 8 visible)
+      // Calculate visible items (max 8)
       const visibleCount = Math.min(resultCount, MAX_VISIBLE_RESULTS)
-      newHeight = SEARCH_BAR_HEIGHT + (visibleCount * RESULT_ITEM_HEIGHT) + PADDING + 40 // 40 for action bar
+      
+      // Estimate number of group headers (at least 1 for FILES or APPLICATIONS)
+      // This is a rough estimate - usually 1-2 headers
+      const estimatedHeaders = Math.min(2, Math.ceil(visibleCount / 3))
+      
+      // Total height = search bar + margin + group headers + items + footer + padding + buffer
+      newHeight = SEARCH_BAR_HEIGHT 
+        + CONTAINER_MARGIN 
+        + (estimatedHeaders * GROUP_HEADER_HEIGHT)
+        + (visibleCount * RESULT_ITEM_HEIGHT) 
+        + FOOTER_HEIGHT 
+        + WINDOW_PADDING
+        + 24 // Extra buffer for rounded corners, shadows, and spacing
     } else if (isAi) {
       // AI mode needs more space
       newHeight = 450
@@ -405,8 +444,8 @@ export const MainPage: Component = () => {
         </div>
       </Show>
 
-      {/* Results List - Only show when there's a query and not in AI mode */}
-      <Show when={showResults()}>
+      {/* Results List - ONLY render when has actual results (no ghost container!) */}
+      <Show when={showResults() && results().length > 0}>
         <div class="mt-2 overflow-hidden rounded-xl bg-white/95 shadow-lg backdrop-blur-xl dark:bg-gray-900/95">
           <ResultList
             results={results()}
@@ -414,11 +453,9 @@ export const MainPage: Component = () => {
             onSelect={setSelectedIndex}
             onExecute={executeResult}
             loading={loading()}
+            query={query().trim()}
             emptyMessage="No results found"
           />
-
-          {/* Action Bar */}
-          <ActionBar visible={results().length > 0} />
         </div>
       </Show>
     </div>

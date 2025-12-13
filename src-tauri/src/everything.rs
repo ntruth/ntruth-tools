@@ -380,18 +380,189 @@ fn resolve_dll_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
     ))
 }
 
+/// Check if a path is an application
+fn is_application_path(path: &str) -> bool {
+    let path_lower = path.to_lowercase();
+    path_lower.ends_with(".exe") 
+        || path_lower.ends_with(".lnk") 
+        || path_lower.ends_with(".msi")
+        || path_lower.ends_with(".appx")
+}
+
+/// Get application priority based on file extension and location
+/// Higher priority = more likely to be a user-facing application
+fn get_app_priority(path: &str) -> i32 {
+    let path_lower = path.to_lowercase();
+    
+    // .lnk files in Start Menu are highest priority (these are user-installed apps)
+    if path_lower.ends_with(".lnk") && path_lower.contains("start menu") {
+        return 1000;
+    }
+    
+    // .lnk files elsewhere
+    if path_lower.ends_with(".lnk") {
+        return 800;
+    }
+    
+    // .exe in Program Files with Start Menu path
+    if path_lower.ends_with(".exe") {
+        if path_lower.contains("start menu") {
+            return 900;
+        }
+        if path_lower.contains("program files") {
+            return 600;
+        }
+        if path_lower.contains("appdata") && path_lower.contains("local") {
+            return 500; // Apps like Chrome, Discord are here
+        }
+        return 400;
+    }
+    
+    // .msi installers
+    if path_lower.ends_with(".msi") {
+        return 300;
+    }
+    
+    0
+}
+
+/// Calculate relevance score for sorting
+/// Higher score = more relevant (apps first, then by name match quality)
+fn calculate_relevance_score(result: &EverythingResult, query: &str) -> i32 {
+    let mut score = 0;
+    let path_lower = result.path.to_lowercase();
+    let query_lower = query.to_lowercase();
+    
+    // Extract filename from path
+    let file_name = std::path::Path::new(&result.path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    
+    // File stem (name without extension)
+    let file_stem = std::path::Path::new(&result.path)
+        .file_stem()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    
+    // Apps get highest priority based on type and location
+    if is_application_path(&result.path) {
+        score += get_app_priority(&result.path);
+    }
+    
+    // Name matching bonuses
+    if file_stem == query_lower {
+        score += 500;  // Exact match
+    } else if file_stem.starts_with(&query_lower) {
+        score += 400;  // Prefix match (e.g., "chrome" matches "Chrome")
+    } else if file_name.starts_with(&query_lower) {
+        score += 350;  // Filename prefix match
+    } else if file_stem.contains(&query_lower) {
+        score += 200;  // Contains match in stem
+    } else if file_name.contains(&query_lower) {
+        score += 100;  // Contains match in full name
+    }
+    
+    // Bonus for short filenames (more likely to be main apps)
+    if file_stem.len() <= query_lower.len() + 5 {
+        score += 50;
+    }
+    
+    // Penalize uninstallers, helpers, and system utilities
+    if file_name.contains("uninstall") 
+        || file_name.contains("setup") && !file_stem.eq(&query_lower)
+        || file_name.contains("updater")
+        || file_name.contains("helper")
+        || file_name.contains("crash")
+        || file_name.contains("reporter")
+        || file_name.contains("service")
+        || file_name.contains("daemon") {
+        score -= 800;
+    }
+    
+    // Penalize paths in Temp, Cache, or system directories
+    if path_lower.contains("\\temp\\") 
+        || path_lower.contains("\\cache\\")
+        || path_lower.contains("\\windows\\") {
+        score -= 300;
+    }
+    
+    score
+}
+
+/// Build smart Everything query for better app/file discovery
+/// Uses Everything's search syntax for optimized results
+fn build_smart_query(user_input: &str) -> String {
+    let input = user_input.trim();
+    
+    // If query is very short, focus on apps only
+    if input.len() <= 2 {
+        return format!(
+            "ext:lnk;exe *{}* !uninstall !setup !update",
+            input
+        );
+    }
+    
+    // For longer queries, search everything but structure for apps first
+    // Using Everything's search syntax
+    format!("*{}*", input)
+}
+
 /// Search using Everything
 /// 
 /// This is the Tauri command exposed to the frontend.
+/// Uses smart query building and relevance-based sorting.
 #[tauri::command]
 pub async fn everything_search(
     query: String,
     max_results: Option<u32>,
 ) -> Result<Vec<EverythingResult>, String> {
-    let max = max_results.unwrap_or(50);
+    let max = max_results.unwrap_or(150); // Get more results for better sorting
+    
+    // Build optimized query
+    let search_query = build_smart_query(&query);
+    
+    tracing::debug!("Everything search: '{}' -> '{}'", query, search_query);
     
     match EVERYTHING.get() {
-        Some(Ok(lib)) => lib.search(&query, max),
+        Some(Ok(lib)) => {
+            let mut results = lib.search(&search_query, max)?;
+            
+            // Filter out unwanted results
+            results.retain(|r| {
+                let path_lower = r.path.to_lowercase();
+                let file_name = std::path::Path::new(&r.path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_lowercase())
+                    .unwrap_or_default();
+                
+                // Skip if query doesn't explicitly want these
+                let query_lower = query.to_lowercase();
+                if !query_lower.contains("uninstall") && file_name.contains("uninstall") {
+                    return false;
+                }
+                
+                // Skip Windows system files unless explicitly searching
+                if path_lower.contains("\\windows\\system32\\") && !query_lower.contains("system") {
+                    return false;
+                }
+                
+                true
+            });
+            
+            // Sort results: apps first, then by relevance score
+            results.sort_by(|a, b| {
+                let score_a = calculate_relevance_score(a, &query);
+                let score_b = calculate_relevance_score(b, &query);
+                score_b.cmp(&score_a) // Descending order (higher score first)
+            });
+            
+            // Return top results after sorting
+            let final_max = max_results.unwrap_or(50) as usize;
+            results.truncate(final_max);
+            
+            Ok(results)
+        },
         Some(Err(e)) => Err(format!("Everything not initialized: {}", e)),
         None => Err("Everything not initialized".to_string()),
     }

@@ -214,11 +214,34 @@ fn is_math_expression(input: &str) -> bool {
 }
 
 /// Check if input is a URL
+/// Must be strict to avoid matching filenames like "file.txt" or "pkg_bsaml.pck"
 fn is_url(input: &str) -> bool {
-    input.starts_with("http://")
-        || input.starts_with("https://")
-        || input.starts_with("www.")
-        || (input.contains('.') && !input.contains(' ') && input.split('.').count() >= 2)
+    // Explicit protocols
+    if input.starts_with("http://") || input.starts_with("https://") || input.starts_with("www.") {
+        return true;
+    }
+    
+    // Check for domain-like patterns
+    // Must not contain spaces and look like a domain with common TLD
+    if input.contains(' ') || input.contains('\\') || input.contains('/') {
+        return false;
+    }
+    
+    // Common TLDs that indicate a URL
+    let common_tlds = ["com", "org", "net", "io", "dev", "cn", "co", "app", "me", "tv", "ai", "edu", "gov"];
+    
+    // Check if ends with a common TLD
+    let parts: Vec<&str> = input.split('.').collect();
+    if parts.len() >= 2 {
+        let tld = parts.last().unwrap().to_lowercase();
+        if common_tlds.contains(&tld.as_str()) {
+            // Additional check: TLD should be at most 3-4 chars for common ones
+            // This helps distinguish "google.com" from "file.docx"
+            return tld.len() <= 4;
+        }
+    }
+    
+    false
 }
 
 /// Normalize URL by adding protocol if missing

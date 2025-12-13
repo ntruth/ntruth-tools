@@ -68,6 +68,13 @@ md5 = "0.7"
 regex = "1.10"
 zip = "0.6"
 
+# Search & Indexing
+walkdir = "2.4"
+pinyin = "0.10"
+fuzzy-matcher = "0.3"
+parking_lot = "0.12"
+once_cell = "1.19"
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]

@@ -1,4 +1,4 @@
-import { Component, For, Show, createEffect } from 'solid-js'
+import { Component, For, Show, createEffect, createMemo } from 'solid-js'
 import type { SearchResult } from '../../types/search'
 import { ResultItem } from './ResultItem'
 
@@ -9,84 +9,158 @@ interface ResultListProps {
   onExecute: (result: SearchResult) => void
   loading?: boolean
   emptyMessage?: string
+  query?: string
 }
 
+// Group header component
+const GroupHeader: Component<{ title: string }> = (props) => (
+  <div class="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+    {props.title}
+  </div>
+)
+
 /**
- * Result list component with virtual scrolling support and keyboard navigation
+ * Result list component with category grouping and keyboard navigation
+ * NOTE: Parent component MUST wrap this in <Show when={results.length > 0}> to prevent ghost containers
  */
 export const ResultList: Component<ResultListProps> = (props) => {
-  let containerRef: HTMLDivElement | undefined
+  let scrollContainerRef: HTMLDivElement | undefined
 
-  // Scroll to selected item
+  // Group results by category
+  const groupedResults = createMemo(() => {
+    const apps = props.results.filter(r => r.category === 'Application')
+    const files = props.results.filter(r => r.category === 'File')
+    const others = props.results.filter(r => 
+      r.category !== 'Application' && r.category !== 'File'
+    )
+    return { apps, files, others }
+  })
+
+  // Scroll to selected item when selection changes
   createEffect(() => {
-    if (!containerRef) return
+    if (!scrollContainerRef) return
 
     const selectedIndex = props.selectedIndex
-    const item = containerRef.children[selectedIndex] as HTMLElement
-    if (item) {
-      // Check if item is in view
-      const containerRect = containerRef.getBoundingClientRect()
-      const itemRect = item.getBoundingClientRect()
+    const items = scrollContainerRef.querySelectorAll('[data-result-index]')
+    const selectedItem = Array.from(items).find(
+      el => el.getAttribute('data-result-index') === String(selectedIndex)
+    ) as HTMLElement | undefined
+    
+    if (selectedItem) {
+      const containerRect = scrollContainerRef.getBoundingClientRect()
+      const itemRect = selectedItem.getBoundingClientRect()
 
-      if (itemRect.bottom > containerRect.bottom) {
-        // Scroll down
-        item.scrollIntoView({ block: 'end', behavior: 'smooth' })
-      } else if (itemRect.top < containerRect.top) {
-        // Scroll up
-        item.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      if (itemRect.bottom > containerRect.bottom - 8) {
+        selectedItem.scrollIntoView({ block: 'end', behavior: 'smooth' })
+      } else if (itemRect.top < containerRect.top + 8) {
+        selectedItem.scrollIntoView({ block: 'start', behavior: 'smooth' })
       }
     }
   })
 
   return (
-    <div class="mt-2 overflow-hidden rounded-xl bg-white/90 shadow-lg backdrop-blur-sm dark:bg-gray-800/90">
-      <Show
-        when={!props.loading && props.results.length > 0}
-        fallback={
-          <div class="p-8 text-center">
-            <Show
-              when={!props.loading}
-              fallback={
-                <div class="flex items-center justify-center gap-2 text-gray-500 dark:text-gray-400">
-                  <div class="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500" />
-                  <span>Searching...</span>
-                </div>
-              }
-            >
-              <div class="text-gray-500 dark:text-gray-400">
-                {props.emptyMessage || 'No results found'}
-              </div>
-            </Show>
-          </div>
-        }
+    <div class="flex flex-col overflow-hidden">
+      {/* Scrollable list area - flex-1 + min-h-0 is critical for proper overflow */}
+      <div
+        ref={scrollContainerRef}
+        class="max-h-[400px] min-h-0 flex-1 overflow-y-auto"
+        style={{
+          'scrollbar-width': 'thin',
+          'scrollbar-color': 'rgb(156, 163, 175) transparent',
+        }}
       >
-        <div
-          ref={containerRef}
-          class="max-h-[480px] overflow-y-auto p-2"
-          style={{
-            'scrollbar-width': 'thin',
-            'scrollbar-color': 'rgb(156, 163, 175) transparent',
-          }}
-        >
-          <For each={props.results}>
-            {(result, index) => (
-              <ResultItem
-                result={result}
-                isSelected={index() === props.selectedIndex}
-                index={index()}
-                onClick={() => props.onExecute(result)}
-                onDoubleClick={() => props.onExecute(result)}
-                onMouseEnter={() => props.onSelect(index())}
-              />
-            )}
-          </For>
-        </div>
+        {/* Applications Section */}
+        <Show when={groupedResults().apps.length > 0}>
+          <GroupHeader title="APPLICATIONS" />
+          <div class="px-2">
+            <For each={groupedResults().apps}>
+              {(result, index) => {
+                const globalIndex = index()
+                return (
+                  <div data-result-index={globalIndex}>
+                    <ResultItem
+                      result={result}
+                      isSelected={globalIndex === props.selectedIndex}
+                      index={globalIndex}
+                      onClick={() => props.onExecute(result)}
+                      onDoubleClick={() => props.onExecute(result)}
+                      onMouseEnter={() => props.onSelect(globalIndex)}
+                    />
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
 
-        {/* Result Count */}
-        <div class="border-t border-gray-200 px-3 py-2 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
-          {props.results.length} result{props.results.length !== 1 ? 's' : ''}
+        {/* Files Section */}
+        <Show when={groupedResults().files.length > 0}>
+          <GroupHeader title="FILES" />
+          <div class="px-2">
+            <For each={groupedResults().files}>
+              {(result, index) => {
+                const globalIndex = groupedResults().apps.length + index()
+                return (
+                  <div data-result-index={globalIndex}>
+                    <ResultItem
+                      result={result}
+                      isSelected={globalIndex === props.selectedIndex}
+                      index={globalIndex}
+                      onClick={() => props.onExecute(result)}
+                      onDoubleClick={() => props.onExecute(result)}
+                      onMouseEnter={() => props.onSelect(globalIndex)}
+                    />
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
+
+        {/* Other Results Section */}
+        <Show when={groupedResults().others.length > 0}>
+          <GroupHeader title="OTHER" />
+          <div class="px-2">
+            <For each={groupedResults().others}>
+              {(result, index) => {
+                const globalIndex = groupedResults().apps.length + groupedResults().files.length + index()
+                return (
+                  <div data-result-index={globalIndex}>
+                    <ResultItem
+                      result={result}
+                      isSelected={globalIndex === props.selectedIndex}
+                      index={globalIndex}
+                      onClick={() => props.onExecute(result)}
+                      onDoubleClick={() => props.onExecute(result)}
+                      onMouseEnter={() => props.onSelect(globalIndex)}
+                    />
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
+
+        {/* Bottom spacer to prevent clipping */}
+        <div class="h-3 flex-shrink-0" />
+      </div>
+
+      {/* Fixed footer - Action Bar */}
+      <div class="flex flex-shrink-0 items-center justify-between border-t border-gray-200/50 px-3 py-1.5 text-xs text-gray-500 dark:border-gray-700/50 dark:text-gray-400">
+        <div>
+          <Show when={groupedResults().apps.length > 0}>
+            <span class="mr-3">{groupedResults().apps.length} app{groupedResults().apps.length !== 1 ? 's' : ''}</span>
+          </Show>
+          <Show when={groupedResults().files.length > 0}>
+            <span>{groupedResults().files.length} file{groupedResults().files.length !== 1 ? 's' : ''}</span>
+          </Show>
         </div>
-      </Show>
+        <div class="flex items-center gap-3">
+          <span><kbd class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-gray-700">↑↓</kbd> Navigate</span>
+          <span><kbd class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-gray-700">↵</kbd> Open</span>
+          <span><kbd class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium dark:bg-gray-700">Esc</kbd> Close</span>
+        </div>
+      </div>
     </div>
   )
 }

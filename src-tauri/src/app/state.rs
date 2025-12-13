@@ -8,6 +8,9 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 use tokio::sync::RwLock;
 
+#[cfg(windows)]
+use crate::app_indexer::AppIndexer;
+
 /// Global application state
 #[derive(Clone)]
 pub struct AppState {
@@ -20,6 +23,8 @@ pub struct AppState {
     clipboard_storage: Arc<RwLock<Option<Arc<ClipboardStorage>>>>,
     clipboard_monitor: Arc<RwLock<Option<Arc<ClipboardMonitor>>>>,
     clipboard_window_manager: Arc<RwLock<Option<Arc<ClipboardWindowManager>>>>,
+    #[cfg(windows)]
+    pub app_indexer: Arc<AppIndexer>,
 }
 
 impl AppState {
@@ -63,6 +68,19 @@ impl AppState {
             tracing::warn!("Failed to initialize plugin manager: {}", e);
         }
 
+        // Initialize app indexer (Windows only)
+        #[cfg(windows)]
+        let app_indexer = {
+            let indexer = Arc::new(AppIndexer::new());
+            // Initialize synchronously to ensure apps are available on first search
+            tracing::info!("Initializing AppIndexer...");
+            match indexer.init().await {
+                Ok(count) => tracing::info!("AppIndexer initialized with {} apps", count),
+                Err(e) => tracing::error!("Failed to initialize AppIndexer: {}", e),
+            }
+            indexer
+        };
+
         Ok(Self {
             app_handle,
             config,
@@ -73,6 +91,8 @@ impl AppState {
             clipboard_storage: Arc::new(RwLock::new(None)),
             clipboard_monitor: Arc::new(RwLock::new(None)),
             clipboard_window_manager: Arc::new(RwLock::new(None)),
+            #[cfg(windows)]
+            app_indexer,
         })
     }
 
