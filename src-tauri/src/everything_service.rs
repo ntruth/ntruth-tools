@@ -401,43 +401,65 @@ pub fn init_everything(app_handle: &tauri::AppHandle) -> Result<(), String> {
 
 /// Resolve DLL path for both dev and production
 fn resolve_dll_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
-    // Try resource path first (production)
-    if let Ok(resource_path) = app_handle.path().resource_dir() {
-        let dll_path = resource_path.join("libs").join("Everything64.dll");
-        if dll_path.exists() {
-            return Ok(dll_path);
-        }
-    }
-    
-    // Try relative to executable (production fallback)
+    // 1. Try exe directory directly (for portable deployment: exe + Everything64.dll in same folder)
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
+            let dll_path = exe_dir.join("Everything64.dll");
+            if dll_path.exists() {
+                tracing::info!("Found Everything64.dll in exe directory: {:?}", dll_path);
+                return Ok(dll_path);
+            }
+            
+            // Also try libs subfolder in exe directory
             let dll_path = exe_dir.join("libs").join("Everything64.dll");
             if dll_path.exists() {
+                tracing::info!("Found Everything64.dll in exe/libs: {:?}", dll_path);
                 return Ok(dll_path);
             }
         }
     }
     
-    // Try src-tauri/libs (development)
+    // 2. Try resource path (Tauri bundled resources)
+    if let Ok(resource_path) = app_handle.path().resource_dir() {
+        let dll_path = resource_path.join("libs").join("Everything64.dll");
+        if dll_path.exists() {
+            tracing::info!("Found Everything64.dll in resource dir: {:?}", dll_path);
+            return Ok(dll_path);
+        }
+        
+        // Try directly in resource dir
+        let dll_path = resource_path.join("Everything64.dll");
+        if dll_path.exists() {
+            tracing::info!("Found Everything64.dll in resource root: {:?}", dll_path);
+            return Ok(dll_path);
+        }
+    }
+    
+    // 3. Try src-tauri/libs (development)
     let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("libs")
         .join("Everything64.dll");
     if dev_path.exists() {
+        tracing::info!("Found Everything64.dll in dev path: {:?}", dev_path);
         return Ok(dev_path);
     }
     
-    // Try current directory
-    let cwd_path = std::env::current_dir()
-        .map(|p| p.join("libs").join("Everything64.dll"))
-        .ok();
-    if let Some(path) = cwd_path {
-        if path.exists() {
-            return Ok(path);
+    // 4. Try current working directory
+    if let Ok(cwd) = std::env::current_dir() {
+        let dll_path = cwd.join("Everything64.dll");
+        if dll_path.exists() {
+            tracing::info!("Found Everything64.dll in cwd: {:?}", dll_path);
+            return Ok(dll_path);
+        }
+        
+        let dll_path = cwd.join("libs").join("Everything64.dll");
+        if dll_path.exists() {
+            tracing::info!("Found Everything64.dll in cwd/libs: {:?}", dll_path);
+            return Ok(dll_path);
         }
     }
     
-    Err("Everything64.dll not found".to_string())
+    Err("Everything64.dll not found in any of: exe directory, libs/, resources/, or current directory".to_string())
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
