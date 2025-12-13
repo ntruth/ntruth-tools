@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod clipboard;
+pub mod capture;
 pub mod plugin;
 pub mod search;
 pub mod settings;

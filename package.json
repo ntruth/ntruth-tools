@@ -27,7 +27,9 @@
     "@tauri-apps/plugin-os": "^2.0.0",
     "@tauri-apps/plugin-process": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2.0.0",
+    "konva": "^9.3.14",
     "lucide-solid": "^0.555.0",
+    "solid-konva": "^1.1.10",
     "solid-js": "^1.8.0"
   },
   "devDependencies": {

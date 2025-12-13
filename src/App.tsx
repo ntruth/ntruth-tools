@@ -6,6 +6,8 @@ import { MainPage } from './pages/Main'
 import ClipboardPage from './pages/Clipboard'
 import AlfredSettings from './pages/Settings/AlfredSettings'
 import AIPage from './pages/AI'
+import CapturePage from './pages/Capture'
+import PinPage from './pages/Pin'
 
 const App: Component = () => {
   const currentWindow = getCurrentWindow()
@@ -81,23 +83,13 @@ const App: Component = () => {
         <Match when={currentWindow.label === 'ai-chat'}>
           <AIPage />
         </Match>
-        <Match when={currentWindow.label.startsWith('pin-')}>
-          <PinWindow />
+        <Match when={currentWindow.label === 'capture'}>
+          <CapturePage />
+        </Match>
+        <Match when={currentWindow.label.startsWith('pin_')}>
+          <PinPage />
         </Match>
       </Switch>
-    </div>
-  )
-}
-
-// Pin window for screenshots
-const PinWindow: Component = () => {
-  return (
-    <div class="h-full w-full bg-transparent">
-      <div class="p-4">
-        <div class="rounded-lg bg-white/95 p-2 dark:bg-gray-900/95">
-          Pinned Screenshot
-        </div>
-      </div>
     </div>
   )
 }

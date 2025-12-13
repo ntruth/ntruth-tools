@@ -89,6 +89,20 @@
         "resizable": true,
         "visible": false,
         "decorations": true
+      },
+      {
+        "label": "capture",
+        "title": "Screen Capture",
+        "url": "/capture",
+        "visible": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "fullscreen": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": true
       }
     ]
   },

@@ -165,6 +165,12 @@ fn main() {
             system::hide_window,
             system::toggle_main_window,
             system::app_ready,
+            // Capture commands
+            capture::init_capture,
+            capture::save_capture,
+            capture::hide_capture_window,
+            capture::create_pin_window,
+            capture::close_pin_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -183,12 +189,13 @@ fn main() {
 fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Create tray menu items
     let show_item = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
+    let capture_item = MenuItem::with_id(app, "capture", "屏幕截图", true, None::<&str>)?;
     let settings_item = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
     let separator = MenuItem::with_id(app, "separator", "───────────", false, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     
     // Build menu
-    let menu = Menu::with_items(app, &[&show_item, &settings_item, &separator, &quit_item])?;
+    let menu = Menu::with_items(app, &[&show_item, &capture_item, &settings_item, &separator, &quit_item])?;
     
     // Get app handle for event handlers
     let app_handle_for_menu = app.handle().clone();
@@ -231,6 +238,15 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
+                }
+                "capture" => {
+                    tracing::info!("Tray menu: Capture clicked");
+                    let app_handle = app_handle_for_menu.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) = capture::init_capture(app_handle).await {
+                            tracing::error!("Capture init from tray failed: {e}");
+                        }
+                    });
                 }
                 "settings" => {
                     tracing::info!("Tray menu: Settings clicked");
@@ -277,6 +293,7 @@ fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error:
     let app_handle_main = app_handle.clone();
     let app_handle_clipboard = app_handle.clone();
     let app_handle_settings = app_handle.clone();
+    let app_handle_capture = app_handle.clone();
     
     // Register main window shortcut (Alt+Space)
     app.global_shortcut().on_shortcut(main_shortcut, move |_app, _shortcut, _event| {
@@ -297,8 +314,19 @@ fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error:
     app.global_shortcut().on_shortcut(settings_shortcut, move |_app, _shortcut, _event| {
         show_settings_window(&app_handle_settings);
     })?;
+
+    // Register capture shortcut: Ctrl+Alt+X (all platforms)
+    let capture_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyX);
+    app.global_shortcut().on_shortcut(capture_shortcut, move |_app, _shortcut, _event| {
+        let app_handle_capture = app_handle_capture.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = capture::init_capture(app_handle_capture).await {
+                tracing::error!("Capture init failed: {e}");
+            }
+        });
+    })?;
     
-    tracing::info!("Global shortcuts registered: Alt+Space (main), Alt+V (clipboard), Alt+, (settings)");
+    tracing::info!("Global shortcuts registered: Alt+Space (main), Alt+V (clipboard), Alt+, (settings), Ctrl+Alt+X (capture)");
     Ok(())
 }
 

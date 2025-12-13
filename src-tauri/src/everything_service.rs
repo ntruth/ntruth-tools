@@ -514,18 +514,28 @@ pub async fn search_files(query: String, max_results: Option<u32>) -> Result<Vec
     
     tracing::debug!("Everything query: {} -> {}", query, smart_query);
     
-    // Run search in blocking thread (Everything API is synchronous)
-    // Note: We don't use timeout here because Everything is generally fast
-    // and timeout can cause issues with the DLL state
-    let result = tokio::task::spawn_blocking(move || {
+    // Run search in blocking thread with timeout (Everything API is synchronous)
+    // Timeout is crucial because Everything IPC can hang if Everything.exe isn't running
+    let search_future = tokio::task::spawn_blocking(move || {
         match EVERYTHING.get() {
             Some(Ok(lib)) => lib.search(&smart_query, max),
             Some(Err(e)) => Err(e.clone()),
             None => Err("Everything not initialized".to_string()),
         }
-    })
-    .await
-    .map_err(|e| format!("Task failed: {}", e))?;
+    });
+    
+    // Apply 2 second timeout - if Everything hangs, return empty results
+    let result = match tokio::time::timeout(std::time::Duration::from_secs(2), search_future).await {
+        Ok(Ok(res)) => res,
+        Ok(Err(e)) => {
+            tracing::error!("Everything search task failed: {}", e);
+            return Ok(Vec::new());
+        }
+        Err(_) => {
+            tracing::warn!("Everything search timed out - is Everything.exe running?");
+            return Ok(Vec::new());
+        }
+    };
     
     // Filter out undesirable results
     let filtered: Vec<FileSearchResult> = result?
