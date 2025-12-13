@@ -1,12 +1,19 @@
 import { Component, createSignal, createMemo, createEffect, Show } from 'solid-js'
 import { invoke } from '@tauri-apps/api/core'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import type { SearchResult } from '../../types/search'
 import { SearchInput } from '../../components/SearchBox'
 import { ResultList } from '../../components/ResultList'
 import { ActionBar } from '../../components/ActionBar'
 import { AIChatView } from '../../components/AIChatView'
 import { useKeyboard, useDebounce } from '../../hooks'
+
+// Window size constants
+const SEARCH_BAR_HEIGHT = 60
+const RESULT_ITEM_HEIGHT = 48
+const MAX_VISIBLE_RESULTS = 8
+const WINDOW_WIDTH = 680
+const PADDING = 16
 
 /**
  * Main search window component
@@ -345,14 +352,35 @@ export const MainPage: Component = () => {
 
   // Whether to show results (only when user has typed something)
   const showResults = createMemo(() => query().trim().length > 0 && !aiMode())
+  
+  // Dynamically resize window based on results
+  createEffect(async () => {
+    const resultCount = results().length
+    const hasResults = showResults() && resultCount > 0
+    const isAi = aiMode()
+    
+    let newHeight = SEARCH_BAR_HEIGHT + PADDING
+    
+    if (hasResults) {
+      // Calculate height based on result count (max 8 visible)
+      const visibleCount = Math.min(resultCount, MAX_VISIBLE_RESULTS)
+      newHeight = SEARCH_BAR_HEIGHT + (visibleCount * RESULT_ITEM_HEIGHT) + PADDING + 40 // 40 for action bar
+    } else if (isAi) {
+      // AI mode needs more space
+      newHeight = 450
+    }
+    
+    try {
+      await currentWindow.setSize(new LogicalSize(WINDOW_WIDTH, newHeight))
+    } catch (e) {
+      console.error('Failed to resize window:', e)
+    }
+  })
 
   return (
-    <div 
-      class="flex h-full w-full items-start justify-center pt-32"
-      data-tauri-drag-region
-    >
-      <div class="w-full max-w-2xl px-4">
-        {/* Search Input */}
+    <div class="flex h-full w-full flex-col bg-transparent p-2">
+      {/* Search Input - already has its own styling */}
+      <div class="search-box-wrapper">
         <SearchInput
           value={query()}
           onInput={setQuery}
@@ -361,23 +389,25 @@ export const MainPage: Component = () => {
           inputType={inputType()}
           autofocus
         />
+      </div>
 
-        {/* AI Chat View - Show when in AI mode */}
-        <Show when={aiMode()}>
-          <div class="mt-4 max-h-96 overflow-y-auto rounded-xl bg-white/80 shadow-lg backdrop-blur-xl dark:bg-gray-800/80">
-            <AIChatView
-              queryId={aiQueryId()}
-              question={aiQuestion()}
-              isLoading={aiLoading()}
-            />
-          </div>
-          <div class="mt-2 text-center text-xs text-gray-500">
-            按 <kbd class="rounded bg-gray-200 px-1.5 py-0.5 dark:bg-gray-700">Esc</kbd> 退出 AI 模式
-          </div>
-        </Show>
+      {/* AI Chat View - Show when in AI mode */}
+      <Show when={aiMode()}>
+        <div class="mt-2 max-h-96 overflow-y-auto rounded-xl bg-white/95 shadow-lg backdrop-blur-xl dark:bg-gray-900/95">
+          <AIChatView
+            queryId={aiQueryId()}
+            question={aiQuestion()}
+            isLoading={aiLoading()}
+          />
+        </div>
+        <div class="mt-2 text-center text-xs text-gray-500">
+          按 <kbd class="rounded bg-gray-200 px-1.5 py-0.5 dark:bg-gray-700">Esc</kbd> 退出 AI 模式
+        </div>
+      </Show>
 
-        {/* Results List - Only show when there's a query and not in AI mode */}
-        <Show when={showResults()}>
+      {/* Results List - Only show when there's a query and not in AI mode */}
+      <Show when={showResults()}>
+        <div class="mt-2 overflow-hidden rounded-xl bg-white/95 shadow-lg backdrop-blur-xl dark:bg-gray-900/95">
           <ResultList
             results={results()}
             selectedIndex={selectedIndex()}
@@ -389,8 +419,8 @@ export const MainPage: Component = () => {
 
           {/* Action Bar */}
           <ActionBar visible={results().length > 0} />
-        </Show>
-      </div>
+        </div>
+      </Show>
     </div>
   )
 }

@@ -5,11 +5,15 @@ description = "Cross-platform productivity launcher and tool"
 authors = ["ntruth"]
 edition = "2021"
 
+[package.metadata]
+[package.metadata.tauri]
+config = "tauri.conf.json"
+
 [build-dependencies]
 tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
-tauri = { version = "2.0", features = ["macos-private-api", "devtools"] }
+tauri = { version = "2.0", features = ["macos-private-api", "devtools", "tray-icon"] }
 tauri-plugin-clipboard-manager = "2.0"
 tauri-plugin-dialog = "2.0"
 tauri-plugin-fs = "2.0"
@@ -17,6 +21,9 @@ tauri-plugin-global-shortcut = "2.0"
 tauri-plugin-os = "2.0"
 tauri-plugin-process = "2.0"
 tauri-plugin-shell = "2.0"
+
+# DLL loading for Everything integration
+libloading = "0.8"
 
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }

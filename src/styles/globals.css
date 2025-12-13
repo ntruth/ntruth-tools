@@ -3,6 +3,25 @@
 @tailwind utilities;
 
 @layer base {
+  /* Critical: Transparent background for launcher window */
+  html, body, #root {
+    background-color: transparent !important;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  
+  html, body {
+    height: 100%;
+    width: 100%;
+  }
+  
+  #root {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
       'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',

@@ -8,10 +8,18 @@ mod platform;
 mod storage;
 mod utils;
 
+#[cfg(windows)]
+mod everything;
+
 use app::state::AppState;
 use commands::*;
 use commands::ai::AIState;
-use tauri::{Manager, RunEvent};
+use tauri::{
+    Manager,
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Emitter,
+};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
 fn main() {
@@ -37,50 +45,70 @@ fn main() {
             }
         })
         .setup(|app| {
-            // Initialize app state (now async)
-            let app_handle = app.handle().clone();
-            let state = tauri::async_runtime::block_on(async move {
-                AppState::new(app_handle).await
-            })?;
+            // ═══════════════════════════════════════════════════════════════════
+            // 1. Initialize AI state immediately (lightweight, no blocking)
+            // ═══════════════════════════════════════════════════════════════════
+            app.manage(AIState::new());
             
-            // Start background indexing task
-            let state_clone = state.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = state_clone.initialize_indexing().await {
-                    tracing::error!("Failed to initialize indexing: {}", e);
+            // ═══════════════════════════════════════════════════════════════════
+            // 2. Setup System Tray (Tauri 2.0 style)
+            // ═══════════════════════════════════════════════════════════════════
+            setup_system_tray(app)?;
+            
+            // ═══════════════════════════════════════════════════════════════════
+            // 3. Register global shortcuts
+            // ═══════════════════════════════════════════════════════════════════
+            register_global_shortcuts(app)?;
+            
+            // ═══════════════════════════════════════════════════════════════════
+            // 4. Initialize Everything search (Windows only)
+            // ═══════════════════════════════════════════════════════════════════
+            #[cfg(windows)]
+            {
+                let app_handle = app.handle().clone();
+                if let Err(e) = everything::init_everything(&app_handle) {
+                    tracing::warn!("Everything search not available: {}", e);
+                } else {
+                    tracing::info!("Everything search initialized successfully");
                 }
-            });
+            }
             
-            // Start clipboard monitoring
-            let state_for_clipboard = state.clone();
+            // ═══════════════════════════════════════════════════════════════════
+            // 5. ASYNC: Initialize heavy state in background (DB, Indexer, etc.)
+            // ═══════════════════════════════════════════════════════════════════
+            let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                if let Ok(monitor) = state_for_clipboard.clipboard_monitor().await {
-                    if let Err(e) = monitor.start().await {
-                        tracing::error!("Failed to start clipboard monitor: {}", e);
+                match AppState::new(app_handle.clone()).await {
+                    Ok(state) => {
+                        // Start background indexing task
+                        let state_clone = state.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = state_clone.initialize_indexing().await {
+                                tracing::error!("Failed to initialize indexing: {}", e);
+                            }
+                        });
+                        
+                        // Start clipboard monitoring
+                        let state_for_clipboard = state.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Ok(monitor) = state_for_clipboard.clipboard_monitor().await {
+                                if let Err(e) = monitor.start().await {
+                                    tracing::error!("Failed to start clipboard monitor: {}", e);
+                                }
+                            }
+                        });
+                        
+                        app_handle.manage(state);
+                        tracing::info!("AppState initialized successfully");
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to initialize AppState: {}", e);
                     }
                 }
             });
             
-            app.manage(state);
-            
-            // Initialize AI state
-            app.manage(AIState::new());
-            
-            // Register global shortcuts
-            register_global_shortcuts(app)?;
-            
-            // 🚀 Show main window on startup (like Alfred)
-            if let Some(main_window) = app.get_webview_window("main") {
-                // Ensure window is centered
-                let _ = main_window.center();
-                // Show the window
-                let _ = main_window.show();
-                // Force focus on the window
-                let _ = main_window.set_focus();
-                tracing::info!("Main window shown and focused");
-            } else {
-                tracing::error!("Failed to get main window");
-            }
+            // ⚠️ DO NOT show window here - wait for frontend `app_ready` signal
+            tracing::info!("Setup complete, waiting for frontend ready signal");
             
             Ok(())
         })
@@ -88,6 +116,9 @@ fn main() {
             // Search commands
             search::search,
             search::calculate,
+            // Everything search (Windows)
+            #[cfg(windows)]
+            everything::everything_search,
             // Clipboard commands
             clipboard::get_clipboard_history,
             clipboard::paste_clipboard_item,
@@ -136,25 +167,75 @@ fn main() {
             system::show_window,
             system::hide_window,
             system::toggle_main_window,
+            system::app_ready,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
-            // Handle macOS Dock icon click (reopen event)
-            if let RunEvent::Reopen { has_visible_windows, .. } = event {
-                if !has_visible_windows {
-                    // Show main window when Dock icon is clicked and no windows visible
-                    if let Some(window) = app_handle.get_webview_window("main") {
-                        let _ = window.center();
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
-                }
+        .run(|_app_handle, event| {
+            // Handle app exit event
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                // Allow exit to proceed normally
+                api.prevent_exit();
             }
         });
 }
 
-/// Register global shortcuts for the application
+// ═══════════════════════════════════════════════════════════════════════════════
+// SYSTEM TRAY SETUP (Tauri 2.0)
+// ═══════════════════════════════════════════════════════════════════════════════
+fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    // Create tray menu items
+    let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+    let separator = MenuItem::with_id(app, "separator", "───────────", false, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    
+    // Build menu
+    let menu = Menu::with_items(app, &[&settings_item, &separator, &quit_item])?;
+    
+    // Get app handle for event handlers
+    let app_handle_menu = app.handle().clone();
+    
+    // Build tray icon
+    let _tray = TrayIconBuilder::new()
+        .icon(app.default_window_icon().unwrap().clone())
+        .tooltip("OmniBox - Press Alt+Space to search")
+        .menu(&menu)
+        .on_tray_icon_event(move |tray, event| {
+            match event {
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } => {
+                    // Left click: Toggle main window
+                    tracing::debug!("Tray icon left clicked");
+                    toggle_window(tray.app_handle(), "main");
+                }
+                _ => {}
+            }
+        })
+        .on_menu_event(move |app, event| {
+            match event.id.as_ref() {
+                "settings" => {
+                    tracing::info!("Tray menu: Settings clicked");
+                    show_settings_window(&app_handle_menu);
+                }
+                "quit" => {
+                    tracing::info!("Tray menu: Quit clicked");
+                    app.exit(0);
+                }
+                _ => {}
+            }
+        })
+        .build(app)?;
+    
+    tracing::info!("System tray initialized successfully");
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GLOBAL SHORTCUTS
+// ═══════════════════════════════════════════════════════════════════════════════
 fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle().clone();
     
@@ -164,51 +245,64 @@ fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error:
     #[cfg(not(target_os = "macos"))]
     let main_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
     
-    // Clipboard shortcut: Cmd+Shift+V (macOS) or Ctrl+Shift+V (Windows/Linux)
+    // Clipboard shortcut: Cmd+Shift+V (macOS) or Alt+V (Windows/Linux)
     #[cfg(target_os = "macos")]
     let clipboard_shortcut = Shortcut::new(Some(Modifiers::META | Modifiers::SHIFT), Code::KeyV);
     #[cfg(not(target_os = "macos"))]
-    let clipboard_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyV);
+    let clipboard_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::KeyV);
     
-    // Settings shortcut: Cmd+, (macOS) or Ctrl+, (Windows/Linux)
+    // Settings shortcut: Cmd+, (macOS) or Alt+, (Windows/Linux)
     #[cfg(target_os = "macos")]
     let settings_shortcut = Shortcut::new(Some(Modifiers::META), Code::Comma);
     #[cfg(not(target_os = "macos"))]
-    let settings_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Comma);
+    let settings_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Comma);
     
     let app_handle_main = app_handle.clone();
     let app_handle_clipboard = app_handle.clone();
     let app_handle_settings = app_handle.clone();
     
-    // Register main window shortcut
+    // Register main window shortcut (Alt+Space)
     app.global_shortcut().on_shortcut(main_shortcut, move |_app, _shortcut, _event| {
         toggle_window(&app_handle_main, "main");
     })?;
     
-    // Register clipboard shortcut
+    // Register clipboard shortcut (Ctrl+Shift+V)
+    // This also emits an event to frontend for UI state change
     app.global_shortcut().on_shortcut(clipboard_shortcut, move |_app, _shortcut, _event| {
+        tracing::debug!("Clipboard shortcut triggered");
+        // Toggle clipboard window
         toggle_window(&app_handle_clipboard, "clipboard");
+        // Also emit event to frontend
+        let _ = app_handle_clipboard.emit("toggle-clipboard-history", ());
     })?;
     
-    // Register settings shortcut
+    // Register settings shortcut (Ctrl+,)
     app.global_shortcut().on_shortcut(settings_shortcut, move |_app, _shortcut, _event| {
         show_settings_window(&app_handle_settings);
     })?;
     
-    tracing::info!("Global shortcuts registered successfully");
+    tracing::info!("Global shortcuts registered: Alt+Space (main), Alt+V (clipboard), Alt+, (settings)");
     Ok(())
 }
 
-/// Toggle window visibility
+// ═══════════════════════════════════════════════════════════════════════════════
+// WINDOW MANAGEMENT HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Toggle window visibility with proper sizing for main window
 fn toggle_window(app_handle: &tauri::AppHandle, label: &str) {
     if let Some(window) = app_handle.get_webview_window(label) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
+            // For main window, ensure correct size before showing
+            if label == "main" {
+                // Reset to search-bar-only size (will expand when results appear)
+                let _ = window.set_size(tauri::LogicalSize::new(680.0, 60.0));
+            }
+            let _ = window.center();
             let _ = window.show();
             let _ = window.set_focus();
-            // Center the window on show
-            let _ = window.center();
         }
     }
 }
