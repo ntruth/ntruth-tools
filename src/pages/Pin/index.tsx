@@ -1,6 +1,7 @@
 import { Component, createSignal, onMount, Show } from 'solid-js'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
 
 /**
  * PinPage - A floating screenshot window that can be dragged around
@@ -32,6 +33,21 @@ const PinPage: Component = () => {
         setImageUrl(`data:image/png;base64,${event.payload.data}`)
       }
     })
+
+    // Reliable fallback: pull payload from backend by window label
+    ;(async () => {
+      try {
+        const label = currentWindow.label
+        const payload = await invoke<{ data: string; width: number; height: number } | null>('get_pin_payload', {
+          label,
+        })
+        if (payload?.data) {
+          setImageUrl(`data:image/png;base64,${payload.data}`)
+        }
+      } catch (e) {
+        console.warn('[Pin] get_pin_payload failed:', e)
+      }
+    })()
 
     // Cleanup
     unlistenPromise.then((unlisten) => {

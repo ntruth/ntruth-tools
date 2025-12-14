@@ -5,6 +5,12 @@ pub mod platform;
 pub mod storage;
 pub mod utils;
 
+// Windows native OCR (WinRT)
+pub mod ocr;
+
+// Windows UI Automation (auto-detect UI elements)
+pub mod automation;
+
 // Search engines
 #[cfg(windows)]
 pub mod app_indexer;

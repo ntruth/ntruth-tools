@@ -73,6 +73,9 @@ pub struct ScreenshotConfig {
     pub quality: u8,
     pub save_dir: PathBuf,
     pub auto_save: bool,
+
+    #[serde(default)]
+    pub ocr_auto_copy: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,6 +150,7 @@ impl Default for AppConfig {
                 quality: 90,
                 save_dir: PathBuf::new(),
                 auto_save: false,
+                ocr_auto_copy: false,
             },
             ai: AIConfig {
                 provider: "openai".to_string(),

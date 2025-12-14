@@ -7,6 +7,8 @@ use omnibox::core;
 use omnibox::platform;
 use omnibox::storage;
 use omnibox::utils;
+use omnibox::automation;
+use omnibox::ocr;
 
 #[cfg(windows)]
 use omnibox::everything_service;
@@ -168,9 +170,18 @@ fn main() {
             // Capture commands
             capture::init_capture,
             capture::save_capture,
+            capture::save_capture_file,
+            capture::copy_capture_base64,
             capture::hide_capture_window,
             capture::create_pin_window,
             capture::close_pin_window,
+            capture::get_pin_payload,
+
+            // OCR (Windows native via WinRT)
+            ocr::recognize_text,
+
+            // UI Automation
+            automation::get_element_rect_at,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

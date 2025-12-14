@@ -62,6 +62,7 @@ export interface AppConfig {
     quality: number
     save_dir: string
     auto_save: boolean
+    ocr_auto_copy?: boolean
   }
   ai: {
     provider: string

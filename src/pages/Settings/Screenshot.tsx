@@ -6,6 +6,7 @@ interface ScreenshotConfig {
   quality: number
   save_dir: string
   auto_save: boolean
+  ocr_auto_copy?: boolean
 }
 
 interface ScreenshotProps {
@@ -151,6 +152,35 @@ const Screenshot: Component<ScreenshotProps> = (props) => {
           <span
             class={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
               props.config.auto_save ? 'left-6' : 'left-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* OCR Auto Copy */}
+      <div class="flex items-center justify-between rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+        <div class="flex items-center gap-3">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
+            <Camera size={20} class="text-blue-600 dark:text-blue-400" />
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-gray-900 dark:text-white">
+              OCR Auto Copy
+            </h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              Copy recognized text to clipboard automatically
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => props.onChange({ ocr_auto_copy: !props.config.ocr_auto_copy })}
+          class={`relative h-6 w-11 rounded-full transition-colors ${
+            props.config.ocr_auto_copy ? 'bg-blue-500' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            class={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
+              props.config.ocr_auto_copy ? 'left-6' : 'left-1'
             }`}
           />
         </button>

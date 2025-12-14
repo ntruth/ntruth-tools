@@ -44,6 +44,22 @@ xcap = "0.4"
 image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
 arboard = "3"
 
+# Windows UI Automation (for auto-detect UI elements)
+windows = { version = "0.58", features = [
+	"Win32_Foundation",
+	"Win32_System_Com",
+	"Win32_System_Ole",
+	"Win32_UI_Accessibility",
+
+	# WinRT OCR (Windows 10/11 native)
+	"Foundation",
+	"Foundation_Collections",
+	"Globalization",
+	"Graphics_Imaging",
+	"Media_Ocr",
+	"Storage_Streams",
+] }
+
 # HTTP client
 reqwest = { version = "0.11", features = ["json", "stream"] }
 

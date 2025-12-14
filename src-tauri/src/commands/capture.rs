@@ -2,8 +2,21 @@ use crate::app::error::{AppError, AppResult};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use image::{DynamicImage, ImageBuffer, Rgba};
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
+use serde::Serialize;
+use std::collections::HashMap;
 use std::io::Cursor;
 use tauri::{Emitter, Manager};
+
+#[derive(Clone, Serialize)]
+pub struct PinPayload {
+    data: String,
+    width: u32,
+    height: u32,
+}
+
+static PIN_PAYLOADS: Lazy<Mutex<HashMap<String, PinPayload>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// Start screen capture - the CORRECT sequence to avoid black screen:
 /// 1. Ensure capture window is HIDDEN
@@ -20,6 +33,10 @@ pub async fn init_capture(app: tauri::AppHandle) -> AppResult<()> {
     
     // Small delay to ensure window is fully hidden before capture
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    // Ask frontend to reset its selection/overlay state for a fresh capture.
+    // This prevents cases where an old full-screen selection stays in editing mode and eats clicks.
+    let _ = app.emit_to("capture", "capture:reset", serde_json::json!({}));
     
     tracing::info!("Starting screen capture...");
     
@@ -124,6 +141,44 @@ pub async fn save_capture(app: tauri::AppHandle, png_bytes: Vec<u8>) -> AppResul
     Ok(())
 }
 
+/// Save PNG to a user-selected file path (frontend picks the path).
+/// `image_data` can be either raw base64 or a full data URL.
+#[tauri::command]
+pub async fn save_capture_file(path: String, image_data: String) -> AppResult<()> {
+    let b64 = image_data
+        .split(',')
+        .last()
+        .unwrap_or(image_data.as_str())
+        .trim();
+
+    let bytes = BASE64
+        .decode(b64)
+        .map_err(|e| AppError::Unknown(format!("Failed to decode base64: {e}")))?;
+
+    std::fs::write(&path, bytes)
+        .map_err(|e| AppError::Unknown(format!("Failed to write file: {e}")))?;
+
+    Ok(())
+}
+
+/// Clipboard fallback using base64 to avoid huge JSON arrays over IPC.
+/// `image_data` can be either raw base64 or a full data URL.
+#[tauri::command]
+pub async fn copy_capture_base64(app: tauri::AppHandle, image_data: String) -> AppResult<()> {
+    let b64 = image_data
+        .split(',')
+        .last()
+        .unwrap_or(image_data.as_str())
+        .trim();
+
+    let png_bytes = BASE64
+        .decode(b64)
+        .map_err(|e| AppError::Unknown(format!("Failed to decode base64: {e}")))?;
+
+    // Reuse existing clipboard writer
+    save_capture(app, png_bytes).await
+}
+
 /// Create a pin window to display a captured screenshot region
 /// The window is always on top and can be dragged around
 #[tauri::command]
@@ -144,6 +199,16 @@ pub async fn create_pin_window(
     let window_label = format!("pin_{}", pin_id);
     
     tracing::info!("Creating pin window: {} at ({}, {}) size {}x{}", window_label, x, y, width, height);
+
+    // Store payload for reliable retrieval (in case event fires before frontend listener)
+    PIN_PAYLOADS.lock().insert(
+        window_label.clone(),
+        PinPayload {
+            data: image_data.clone(),
+            width,
+            height,
+        },
+    );
     
     // Build the pin window - keep URL small; send image via event
     let pin_window = WebviewWindowBuilder::new(
@@ -168,7 +233,7 @@ pub async fn create_pin_window(
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
     // Send image data to pin window
-    app.emit_to(
+    let _ = app.emit_to(
         &window_label,
         "pin:set_image",
         serde_json::json!({
@@ -176,7 +241,7 @@ pub async fn create_pin_window(
             "width": width,
             "height": height,
         }),
-    )?;
+    );
 
     // Show after payload is sent
     let _ = pin_window.show();
@@ -189,6 +254,12 @@ pub async fn create_pin_window(
     
     tracing::info!("Pin window created successfully");
     Ok(())
+}
+
+/// Pin window pulls its payload on mount (reliable even if initial event was missed)
+#[tauri::command]
+pub async fn get_pin_payload(label: String) -> AppResult<Option<PinPayload>> {
+    Ok(PIN_PAYLOADS.lock().remove(&label))
 }
 
 /// Close a pin window
