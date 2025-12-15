@@ -72,7 +72,10 @@ pub async fn show_window(label: String, state: State<'_, AppState>) -> AppResult
     
     // Show the target window
     if let Some(window) = app_handle.get_webview_window(&label) {
-        window.center()?;
+        // Don't re-center the launcher window; users may have dragged it.
+        if label != "main" && label != "launcher" {
+            window.center()?;
+        }
         window.show()?;
         window.set_focus()?;
         tracing::info!("Window '{}' shown and focused", label);
@@ -99,7 +102,7 @@ pub async fn toggle_main_window(state: State<'_, AppState>) -> AppResult<()> {
         } else {
             window.show()?;
             window.set_focus()?;
-            window.center()?;
+            // Preserve previous user-dragged position.
         }
     }
     Ok(())

@@ -64,7 +64,8 @@
         "transparent": true,
         "visible": false,
         "skipTaskbar": true,
-        "alwaysOnTop": true
+        "alwaysOnTop": true,
+        "focus": true
       },
       {
         "label": "ai",

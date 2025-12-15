@@ -28,6 +28,24 @@ fn main() {
     // Initialize logger
     utils::logger::init_simple_logger();
 
+    fn launcher_autohide_enabled() -> bool {
+        // In dev, default OFF to avoid annoying debug workflow.
+        // Enable in dev by setting: OMNIBOX_AUTOHIDE_ON_BLUR=1
+        // In release, default ON; disable via: OMNIBOX_AUTOHIDE_ON_BLUR=0
+        let v = std::env::var("OMNIBOX_AUTOHIDE_ON_BLUR").ok();
+        let explicit = v.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty());
+
+        if cfg!(debug_assertions) {
+            return matches!(explicit, Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES"));
+        }
+
+        // release
+        match explicit {
+            Some("0") | Some("false") | Some("FALSE") | Some("no") | Some("NO") => false,
+            _ => true,
+        }
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -42,6 +60,16 @@ fn main() {
                 if window.label() == "main" {
                     // Prevent the window from closing, just hide it
                     api.prevent_close();
+                    let _ = window.hide();
+                    return;
+                }
+            }
+
+            // Auto-hide launcher (main window only) when it loses focus.
+            // DO NOT apply to clipboard or other windows!
+            if let tauri::WindowEvent::Focused(false) = event {
+                let label = window.label();
+                if label == "main" && launcher_autohide_enabled() {
                     let _ = window.hide();
                 }
             }
@@ -114,6 +142,41 @@ fn main() {
             
             Ok(())
         })
+        .on_window_event(|window, event| {
+            // Launcher UX: hide when it loses focus.
+            // Dev-mode guard: disabled by default in debug builds, enable by setting env `OMNIBOX_BLUR_HIDE=1`.
+            if window.label() != "main" {
+                return;
+            }
+
+            if let tauri::WindowEvent::Focused(focused) = event {
+                if *focused {
+                    return;
+                }
+
+                let enabled = if cfg!(debug_assertions) {
+                    matches!(
+                        std::env::var("OMNIBOX_BLUR_HIDE")
+                            .unwrap_or_default()
+                            .to_ascii_lowercase()
+                            .as_str(),
+                        "1" | "true" | "yes" | "on"
+                    )
+                } else {
+                    !matches!(
+                        std::env::var("OMNIBOX_BLUR_HIDE")
+                            .unwrap_or_else(|_| "1".to_string())
+                            .to_ascii_lowercase()
+                            .as_str(),
+                        "0" | "false" | "no" | "off"
+                    )
+                };
+
+                if enabled {
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             // Search commands (uses hybrid search: AppIndexer + Everything)
             search::search,
@@ -169,11 +232,13 @@ fn main() {
             system::app_ready,
             // Capture commands
             capture::init_capture,
+            capture::capture_frontend_ready,
             capture::save_capture,
             capture::save_capture_file,
             capture::copy_capture_base64,
             capture::hide_capture_window,
             capture::create_pin_window,
+            capture::create_pin_window_from_selection,
             capture::close_pin_window,
             capture::get_pin_payload,
 
@@ -289,11 +354,11 @@ fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error:
     #[cfg(not(target_os = "macos"))]
     let main_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
     
-    // Clipboard shortcut: Cmd+Shift+V (macOS) or Alt+V (Windows/Linux)
+    // Clipboard shortcut: Cmd+Shift+V (macOS) or Ctrl+Alt+V (Windows/Linux)
     #[cfg(target_os = "macos")]
     let clipboard_shortcut = Shortcut::new(Some(Modifiers::META | Modifiers::SHIFT), Code::KeyV);
     #[cfg(not(target_os = "macos"))]
-    let clipboard_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::KeyV);
+    let clipboard_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyV);
     
     // Settings shortcut: Cmd+, (macOS) or Alt+, (Windows/Linux)
     #[cfg(target_os = "macos")]
@@ -337,7 +402,7 @@ fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error:
         });
     })?;
     
-    tracing::info!("Global shortcuts registered: Alt+Space (main), Alt+V (clipboard), Alt+, (settings), Ctrl+Alt+X (capture)");
+    tracing::info!("Global shortcuts registered: Alt+Space (main), Ctrl+Alt+V (clipboard), Alt+, (settings), Ctrl+Alt+X (capture)");
     Ok(())
 }
 
@@ -356,9 +421,22 @@ fn toggle_window(app_handle: &tauri::AppHandle, label: &str) {
                 // Reset to search-bar-only size (will expand when results appear)
                 let _ = window.set_size(tauri::LogicalSize::new(680.0, 60.0));
             }
-            let _ = window.center();
+            // Do NOT force center for the launcher; users can drag it.
+            if label != "main" {
+                let _ = window.center();
+            }
             let _ = window.show();
             let _ = window.set_focus();
+            
+            // For clipboard window, retry focus after a short delay
+            // (Windows transparent windows can be finicky with focus)
+            if label == "clipboard" {
+                let win = window.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    let _ = win.set_focus();
+                });
+            }
         }
     }
 }

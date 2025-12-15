@@ -11,7 +11,7 @@ export interface AnnotationLayerApi {
   redo: () => void
   canUndo: () => boolean
   canRedo: () => boolean
-  exportBlob: () => Promise<Blob>
+  exportBlob: (opts?: { pixelRatio?: number }) => Promise<Blob>
 }
 
 export interface AnnotationLayerProps {

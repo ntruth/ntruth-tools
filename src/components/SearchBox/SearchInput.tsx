@@ -42,6 +42,7 @@ export const SearchInput: Component<SearchInputProps> = (props) => {
       classList={{
         'ring-2 ring-blue-500 dark:ring-blue-400': isFocused(),
       }}
+      data-tauri-drag-region
     >
       {/* Search Icon */}
       <Search class="h-5 w-5 flex-shrink-0 text-gray-400 dark:text-gray-500" />
@@ -58,6 +59,7 @@ export const SearchInput: Component<SearchInputProps> = (props) => {
         class="flex-1 bg-transparent text-base outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
         autocomplete="off"
         spellcheck={false}
+        data-tauri-drag-region="false"
       />
 
       {/* Input Type Indicator */}
@@ -73,6 +75,7 @@ export const SearchInput: Component<SearchInputProps> = (props) => {
           onClick={handleClear}
           class="flex-shrink-0 rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
           aria-label="Clear search"
+          data-tauri-drag-region="false"
         >
           <X class="h-4 w-4" />
         </button>

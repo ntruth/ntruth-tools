@@ -75,6 +75,7 @@ export const ResultItem: Component<ResultItemProps> = (props) => {
         'bg-blue-50 dark:bg-blue-900/30': props.isSelected,
         'hover:bg-gray-50 dark:hover:bg-gray-800/50': !props.isSelected,
       }}
+      data-tauri-drag-region="false"
     >
       {/* Icon */}
       <div

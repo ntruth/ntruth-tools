@@ -4,6 +4,7 @@ import { Plus, Trash2 } from 'lucide-solid'
 interface ClipboardConfig {
   enabled: boolean
   history_limit: number
+  retention_days: number
   filter_sensitive: boolean
   exclude_apps: string[]
 }
@@ -84,6 +85,29 @@ const Clipboard: Component<ClipboardProps> = (props) => {
             class="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
           />
           <span class="ml-2 text-sm text-gray-500">items</span>
+        </div>
+      </div>
+
+      {/* Retention Days */}
+      <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+        <h3 class="text-sm font-medium text-gray-900 dark:text-white">
+          Retention Period
+        </h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          How long to keep clipboard items before auto-cleanup
+        </p>
+        <div class="mt-3">
+          <input
+            type="number"
+            min="1"
+            max="365"
+            value={props.config.retention_days}
+            onChange={(e) =>
+              props.onChange({ retention_days: parseInt(e.currentTarget.value) || 30 })
+            }
+            class="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+          />
+          <span class="ml-2 text-sm text-gray-500">days</span>
         </div>
       </div>
 

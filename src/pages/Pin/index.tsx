@@ -1,5 +1,5 @@
 import { Component, createSignal, onMount, Show } from 'solid-js'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 
@@ -14,7 +14,7 @@ import { invoke } from '@tauri-apps/api/core'
 const PinPage: Component = () => {
   const [imageUrl, setImageUrl] = createSignal<string>('')
   
-  const currentWindow = getCurrentWindow()
+  const currentWindow = getCurrentWebviewWindow()
 
   onMount(() => {
     // Parse query params from URL
@@ -56,22 +56,46 @@ const PinPage: Component = () => {
     })
   })
 
-  // Start dragging - uses Tauri's native window drag
-  const onMouseDown = async (e: MouseEvent) => {
-    if (e.button !== 0) return // Only left click
-    
-    // Use Tauri's native window drag
+  const closeSelf = async () => {
+    try {
+      // Prefer backend close (most reliable across platforms)
+      await invoke('close_pin_window', { label: currentWindow.label })
+      return
+    } catch (err) {
+      console.warn('[Pin] close_pin_window failed, fallback to window.close():', err)
+    }
+
+    try {
+      await currentWindow.close()
+    } catch (err) {
+      console.warn('[Pin] Close failed:', err)
+    }
+  }
+
+  const handleDoubleClick = async (e: MouseEvent) => {
+    e.stopPropagation()
+    await closeSelf()
+  }
+
+  const handlePointerDown = async (e: PointerEvent) => {
+    // Left button only
+    if ((e as any).button !== 0) return
+
+    // Don't drag when interacting with toolbar/buttons
+    const target = e.target as HTMLElement | null
+    if (target?.closest?.('[data-pin-toolbar="true"]')) return
+
     try {
       await currentWindow.startDragging()
-    } catch (err) {
-      console.warn('[Pin] Drag failed:', err)
+    } catch {
+      // ignore (some platforms/contexts may not support)
     }
   }
 
   // Close pin window
   const handleClose = async (e: MouseEvent) => {
     e.stopPropagation()
-    await currentWindow.close()
+    await closeSelf()
   }
 
   // Copy image to clipboard
@@ -96,8 +120,16 @@ const PinPage: Component = () => {
   return (
     <div
       class="group relative h-full w-full cursor-move select-none overflow-hidden bg-transparent"
-      onMouseDown={onMouseDown}
+      data-tauri-drag-region
+      onDblClick={handleDoubleClick}
+      onPointerDown={handlePointerDown}
     >
+      {/*
+        Windows transparent windows can become "click-through" when the surface is fully transparent.
+        This near-invisible background keeps hit-testing reliable without affecting appearance.
+      */}
+      <div class="absolute inset-0" style={{ background: 'rgba(0,0,0,0.01)' }} />
+
       {/* Image */}
       <Show when={imageUrl()}>
         <img
@@ -105,11 +137,16 @@ const PinPage: Component = () => {
           alt="Pinned screenshot"
           class="h-full w-full object-contain"
           draggable={false}
+          onDblClick={handleDoubleClick}
         />
       </Show>
 
       {/* Toolbar - visible on hover */}
-      <div class="absolute right-1 top-1 flex gap-1 rounded-md bg-black/60 p-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <div
+        class="absolute right-1 top-1 flex gap-1 rounded-md bg-black/60 p-1 opacity-0 transition-opacity group-hover:opacity-100"
+        data-tauri-drag-region="false"
+        data-pin-toolbar="true"
+      >
         {/* Copy button */}
         <button
           class="flex h-6 w-6 items-center justify-center rounded text-white/80 hover:bg-white/20 hover:text-white"

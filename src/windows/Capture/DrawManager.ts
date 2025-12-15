@@ -33,7 +33,7 @@ export interface DrawManagerApi {
   redo: () => void
   canUndo: () => boolean
   canRedo: () => boolean
-  exportBlob: () => Promise<Blob>
+  exportBlob: (opts?: { pixelRatio?: number }) => Promise<Blob>
   destroy: () => void
 
   // optional hooks for external UI
@@ -335,10 +335,8 @@ export class DrawManager implements DrawManagerApi {
     this.restoreFromSnapshot(next)
   }
 
-  async exportBlob(): Promise<Blob> {
-    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1
-    // OCR benefits from higher resolution; cap to avoid huge payloads.
-    const pixelRatio = Math.max(1, Math.min(3, dpr))
+  async exportBlob(opts?: { pixelRatio?: number }): Promise<Blob> {
+    const pixelRatio = Math.max(1, Math.min(3, Number(opts?.pixelRatio ?? 1)))
     const canvas = this.stage.toCanvas({ pixelRatio })
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob: Blob | null) => {
@@ -475,14 +473,39 @@ export class DrawManager implements DrawManagerApi {
     return { x: pos.x, y: pos.y }
   }
 
-  private onPointerDown(_evt: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
+  private onPointerDown(evt: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
     if (this.isSpaceDown) return
 
     const pos = this.getPointerPosition()
     if (!pos) return
 
-    // Text tool: click to create a text node
+    // Text tool: click to create OR edit text
     if (this.tool === 'text') {
+      const target = evt.target
+
+      // If clicking on an existing text entity (Group or Text node), edit it instead of creating new
+      if (target && target !== this.stage && target !== this.backgroundNode) {
+        // Check if it's a textGroup or inside one
+        const textGroup =
+          target instanceof Konva.Group && target.name() === 'textGroup'
+            ? target
+            : target instanceof Konva.Text || target instanceof Konva.Rect
+              ? (target.getParent() as Konva.Group | null)
+              : null
+
+        if (textGroup && textGroup.name() === 'textGroup') {
+          this.editTextEntity(textGroup)
+          return
+        }
+
+        // If clicking directly on a standalone Text node
+        if (target instanceof Konva.Text) {
+          this.editTextNode(target)
+          return
+        }
+      }
+
+      // Otherwise, create a new text at this position
       const g = this.createTextAt(pos.x, pos.y)
       // Snipaste-like: immediately enter editing after placing
       this.editTextEntity(g)
@@ -742,7 +765,7 @@ export class DrawManager implements DrawManagerApi {
     const text = new Konva.Text({
       x: 0,
       y: 0,
-      text: '文本',
+      text: '',
       fontFamily: s.fontFamily,
       fontStyle,
       fontSize: s.fontSize,
@@ -792,32 +815,113 @@ export class DrawManager implements DrawManagerApi {
   }
 
   private editTextNode(textNode: Konva.Text, owningGroup?: Konva.Group) {
+    const initialText = textNode.text()
     const absPos = textNode.getAbsolutePosition()
     const stageBox = this.container.getBoundingClientRect()
+    const stageWidth = this.stage.width()
+    const stageHeight = this.stage.height()
 
     const area = document.createElement('textarea')
-    area.value = textNode.text()
+    area.value = initialText
+    area.placeholder = '文本'
     area.style.position = 'fixed'
     area.style.left = `${stageBox.left + absPos.x}px`
     area.style.top = `${stageBox.top + absPos.y}px`
-    area.style.width = `${Math.max(50, textNode.width())}px`
-    area.style.height = `${Math.max(24, textNode.height())}px`
+    // Calculate max width before hitting right edge of stage
+    const maxWidth = Math.max(100, stageWidth - absPos.x - 10)
+    area.style.minWidth = '60px'
+    area.style.maxWidth = `${maxWidth}px`
+    area.style.width = 'auto'
+    area.style.height = 'auto'
+    area.style.minHeight = '28px'
     area.style.fontFamily = `${textNode.fontFamily() || 'Microsoft YaHei UI'}`
     area.style.fontSize = `${textNode.fontSize()}px`
+    area.style.lineHeight = '1.3'
     const fs = (textNode.fontStyle?.() as any) || 'normal'
     area.style.fontWeight = String(fs).includes('bold') ? '700' : '400'
     area.style.fontStyle = String(fs).includes('italic') ? 'italic' : 'normal'
     area.style.border = '1px solid rgba(255,255,255,0.35)'
-    area.style.padding = '2px 4px'
+    area.style.padding = '4px 6px'
     area.style.margin = '0'
-    area.style.background = 'rgba(0,0,0,0.6)'
+    area.style.background = 'rgba(0,0,0,0.75)'
     area.style.color = 'white'
     area.style.outline = 'none'
     area.style.resize = 'none'
     area.style.zIndex = '9999'
+    area.style.pointerEvents = 'auto'
+    area.style.userSelect = 'text'
+    area.style.whiteSpace = 'pre-wrap'
+    area.style.wordBreak = 'break-word'
+    area.style.overflowWrap = 'break-word'
+    area.style.overflow = 'hidden'
+    ;(area as any).tabIndex = 0
 
     document.body.appendChild(area)
-    area.focus()
+
+    // Auto-resize textarea to fit content
+    const autoResize = () => {
+      // Reset height to auto to measure scrollHeight
+      area.style.height = 'auto'
+      // Measure content width with a hidden span
+      const span = document.createElement('span')
+      span.style.visibility = 'hidden'
+      span.style.position = 'absolute'
+      span.style.whiteSpace = 'pre'
+      span.style.font = area.style.font
+      span.style.fontSize = area.style.fontSize
+      span.style.fontFamily = area.style.fontFamily
+      span.style.fontWeight = area.style.fontWeight
+      span.style.padding = area.style.padding
+      span.textContent = area.value || ' '
+      document.body.appendChild(span)
+      const contentWidth = Math.min(span.offsetWidth + 20, maxWidth)
+      document.body.removeChild(span)
+
+      // Set width based on content, capped at maxWidth
+      if (!area.value.includes('\n') && contentWidth < maxWidth) {
+        area.style.width = `${Math.max(60, contentWidth)}px`
+      } else {
+        area.style.width = `${maxWidth}px`
+      }
+      // Set height based on scrollHeight
+      area.style.height = `${Math.max(28, area.scrollHeight)}px`
+
+      // If textarea would go below stage, adjust top position
+      const areaRect = area.getBoundingClientRect()
+      const stageBottom = stageBox.top + stageHeight
+      if (areaRect.bottom > stageBottom) {
+        const newTop = Math.max(stageBox.top, stageBottom - areaRect.height - 5)
+        area.style.top = `${newTop}px`
+      }
+    }
+
+    // Prevent Konva/canvas handlers from stealing the click/focus.
+    // WebView2 can be picky about focus; retry focus in rAF/timeout.
+    const stop = (e: Event) => {
+      e.stopPropagation()
+    }
+    area.addEventListener('pointerdown', stop)
+    area.addEventListener('mousedown', stop)
+    area.addEventListener('input', autoResize)
+
+    const focusArea = () => {
+      try {
+        area.focus({ preventScroll: true } as any)
+      } catch {
+        area.focus()
+      }
+    }
+
+    focusArea()
+    autoResize()
+    requestAnimationFrame(() => {
+      focusArea()
+      autoResize()
+    })
+    setTimeout(() => {
+      focusArea()
+      autoResize()
+    }, 0)
     try {
       const len = area.value.length
       area.setSelectionRange(len, len)
@@ -829,6 +933,9 @@ export class DrawManager implements DrawManagerApi {
     const cleanup = () => {
       if (cleaned) return
       cleaned = true
+      area.removeEventListener('pointerdown', stop)
+      area.removeEventListener('mousedown', stop)
+      area.removeEventListener('input', autoResize)
       area.removeEventListener('keydown', onKeyDown)
       area.removeEventListener('blur', onBlur)
       if (area.parentElement) area.parentElement.removeChild(area)
@@ -836,9 +943,20 @@ export class DrawManager implements DrawManagerApi {
 
     const finish = () => {
       if (cleaned) return
-      const value = area.value.trim() || '文本'
+      const trimmed = area.value.trim()
       cleanup()
-      textNode.text(value)
+
+      // If user leaves it empty, remove the annotation entirely.
+      if (trimmed.length === 0) {
+        this.clearSelection()
+        if (owningGroup) owningGroup.destroy()
+        else textNode.destroy()
+        this.drawLayer.batchDraw()
+        this.commitHistory()
+        return
+      }
+
+      textNode.text(area.value)
       if (owningGroup) this.syncTextGroupLayout(owningGroup)
       this.drawLayer.batchDraw()
       this.commitHistory()
@@ -847,12 +965,34 @@ export class DrawManager implements DrawManagerApi {
     const cancel = () => {
       if (cleaned) return
       cleanup()
+
+      // If this text started empty (newly created) and user cancels, discard it.
+      if (initialText.trim().length === 0) {
+        this.clearSelection()
+        if (owningGroup) owningGroup.destroy()
+        else textNode.destroy()
+        this.drawLayer.batchDraw()
+        this.commitHistory()
+        return
+      }
+
       this.drawLayer.batchDraw()
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
-      // Enter confirms (Shift+Enter for newline)
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // Enter confirms, Ctrl+Enter or Shift+Enter for newline
+      if (e.key === 'Enter') {
+        if (e.ctrlKey || e.shiftKey) {
+          // Insert newline at cursor position
+          const start = area.selectionStart
+          const end = area.selectionEnd
+          const value = area.value
+          area.value = value.substring(0, start) + '\n' + value.substring(end)
+          area.selectionStart = area.selectionEnd = start + 1
+          autoResize()
+          e.preventDefault()
+          return
+        }
         e.preventDefault()
         finish()
         return

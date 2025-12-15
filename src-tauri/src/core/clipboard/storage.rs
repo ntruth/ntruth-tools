@@ -314,4 +314,49 @@ impl ClipboardStorage {
     pub async fn increment_access_count(&self, id: &str) -> AppResult<()> {
         self.record_access(id).await
     }
+
+    /// Clean up old items based on retention days and limit
+    /// Keeps favorites regardless of age/limit
+    pub async fn cleanup(&self, retention_days: usize, history_limit: usize) -> AppResult<usize> {
+        let cutoff = Utc::now() - chrono::Duration::days(retention_days as i64);
+        
+        // Delete items older than retention_days (except favorites)
+        let deleted_by_age = sqlx::query(
+            "DELETE FROM clipboard_history WHERE is_favorite = FALSE AND created_at < ?"
+        )
+        .bind(cutoff)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        // Get current count (excluding favorites)
+        let current_count: i32 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM clipboard_history WHERE is_favorite = FALSE"
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // If still over limit, delete oldest items
+        let mut deleted_by_limit = 0u64;
+        if current_count as usize > history_limit {
+            let excess = current_count as usize - history_limit;
+            deleted_by_limit = sqlx::query(
+                r#"
+                DELETE FROM clipboard_history 
+                WHERE id IN (
+                    SELECT id FROM clipboard_history 
+                    WHERE is_favorite = FALSE 
+                    ORDER BY created_at ASC 
+                    LIMIT ?
+                )
+                "#
+            )
+            .bind(excess as i32)
+            .execute(&self.pool)
+            .await?
+            .rows_affected();
+        }
+
+        Ok((deleted_by_age + deleted_by_limit) as usize)
+    }
 }

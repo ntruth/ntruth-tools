@@ -89,25 +89,24 @@ const CapturePage: Component = () => {
     if (sel.w <= 0 || sel.h <= 0) return
 
     // Crop once for Konva background
+    const scaleX = image.width / window.innerWidth
+    const scaleY = image.height / window.innerHeight
+
+    const srcX = Math.max(0, Math.round(sel.x * scaleX))
+    const srcY = Math.max(0, Math.round(sel.y * scaleY))
+    const srcW = Math.max(1, Math.round(sel.w * scaleX))
+    const srcH = Math.max(1, Math.round(sel.h * scaleY))
+
     const cropCanvas = document.createElement('canvas')
-    cropCanvas.width = Math.round(sel.w)
-    cropCanvas.height = Math.round(sel.h)
+    // Keep native pixels to avoid blurry annotation background on HiDPI screens.
+    cropCanvas.width = srcW
+    cropCanvas.height = srcH
     const ctx = cropCanvas.getContext('2d')
     if (!ctx) return
 
-    const scaleX = image.width / window.innerWidth
-    const scaleY = image.height / window.innerHeight
-    ctx.drawImage(
-      image,
-      sel.x * scaleX,
-      sel.y * scaleY,
-      sel.w * scaleX,
-      sel.h * scaleY,
-      0,
-      0,
-      sel.w,
-      sel.h,
-    )
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(image, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH)
     setCropDataUrl(cropCanvas.toDataURL('image/png'))
   })
 
@@ -117,8 +116,11 @@ const CapturePage: Component = () => {
 
     const syncCanvasSize = () => {
       if (canvasRef) {
-        canvasRef.width = window.innerWidth
-        canvasRef.height = window.innerHeight
+        const dpr = window.devicePixelRatio || 1
+        canvasRef.width = Math.max(1, Math.round(window.innerWidth * dpr))
+        canvasRef.height = Math.max(1, Math.round(window.innerHeight * dpr))
+        canvasRef.style.width = `${window.innerWidth}px`
+        canvasRef.style.height = `${window.innerHeight}px`
       }
       const image = bgImage()
       if (image && canvasRef) {
@@ -158,6 +160,15 @@ const CapturePage: Component = () => {
       console.log('[Capture] Reset event received')
       resetState()
     })
+
+    // Important: signal backend only AFTER listeners are registered.
+    // This prevents missing the first capture:ready event when capture is triggered
+    // before the capture webview finishes loading.
+    try {
+      await invoke('capture_frontend_ready')
+    } catch (err) {
+      console.warn('[Capture] capture_frontend_ready failed:', err)
+    }
 
     onCleanup(() => {
       console.log('[Capture] Cleaning up...')
@@ -200,23 +211,30 @@ const CapturePage: Component = () => {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = Math.max(1, Math.round(window.innerWidth * dpr))
+    canvas.height = Math.max(1, Math.round(window.innerHeight * dpr))
+    canvas.style.width = `${window.innerWidth}px`
+    canvas.style.height = `${window.innerHeight}px`
+
+    // Draw using CSS pixels
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
     // Draw background image
-    ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight)
+    ctx.drawImage(image, 0, 0, window.innerWidth, window.innerHeight)
 
     // Draw dark overlay
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
 
     // Cut out selection area
     const sel = selection()
     if (sel && sel.w > 0 && sel.h > 0) {
       ctx.clearRect(sel.x, sel.y, sel.w, sel.h)
       // Redraw image in selection
-      const scaleX = image.width / canvas.width
-      const scaleY = image.height / canvas.height
+      const scaleX = image.width / window.innerWidth
+      const scaleY = image.height / window.innerHeight
       ctx.drawImage(
         image,
         sel.x * scaleX, sel.y * scaleY, sel.w * scaleX, sel.h * scaleY,
@@ -340,7 +358,10 @@ const CapturePage: Component = () => {
     const api = annotationApi()
     if (api) {
       try {
-        return await api.exportBlob()
+        const dpr = window.devicePixelRatio || 1
+        // Preserve native quality; do not cap pixel ratio.
+        const pixelRatio = Math.max(1, dpr)
+        return await api.exportBlob({ pixelRatio })
       } catch {
         // fallback to legacy crop
       }
@@ -362,6 +383,34 @@ const CapturePage: Component = () => {
 
     // (Konva path should have returned above)
 
+    return new Promise((resolve) => cropCanvas.toBlob(resolve, 'image/png'))
+  }
+
+  // Get selection image for OCR (native pixel crop from original screenshot)
+  // - Avoids low-res Konva export (background is window-scaled)
+  // - Keeps annotations out of the OCR input (more accurate)
+  const getSelectionBlobForOcr = async (): Promise<Blob | null> => {
+    const sel = selection()
+    const image = bgImage()
+    if (!sel || !image) return null
+
+    const scaleX = image.width / window.innerWidth
+    const scaleY = image.height / window.innerHeight
+
+    const srcX = Math.max(0, Math.round(sel.x * scaleX))
+    const srcY = Math.max(0, Math.round(sel.y * scaleY))
+    const srcW = Math.max(1, Math.round(sel.w * scaleX))
+    const srcH = Math.max(1, Math.round(sel.h * scaleY))
+
+    const cropCanvas = document.createElement('canvas')
+    // OCR should use the original pixel crop for maximum fidelity.
+    cropCanvas.width = srcW
+    cropCanvas.height = srcH
+    const ctx = cropCanvas.getContext('2d')
+    if (!ctx) return null
+
+    ctx.imageSmoothingEnabled = false
+    ctx.drawImage(image, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH)
     return new Promise((resolve) => cropCanvas.toBlob(resolve, 'image/png'))
   }
 
@@ -395,7 +444,7 @@ const CapturePage: Component = () => {
       const blob = await getSelectionBlob()
       if (!blob) return
       const base64 = await blobToBase64(blob)
-      await invoke('copy_capture_base64', { image_data: base64 })
+      await invoke('copy_capture_base64', { imageData: base64 })
       handleCancel()
     }
   }
@@ -412,7 +461,7 @@ const CapturePage: Component = () => {
 
   const handleOcr = async () => {
     try {
-      const blob = await getSelectionBlob()
+      const blob = await getSelectionBlobForOcr()
       if (!blob) return
 
       const base64 = await blobToBase64(blob)
@@ -421,8 +470,9 @@ const CapturePage: Component = () => {
       setOcrOpen(true)
       setOcrLoading(true)
 
-      const text = await invoke<string>('recognize_text', { base64_image: base64 })
-      setOcrText(text || '')
+      const text = await invoke<string>('recognize_text', { base64Image: base64 })
+      const trimmed = (text || '').trim()
+      setOcrText(trimmed ? text : '未识别到文字')
 
       // Auto copy (optional)
       if (await getOcrAutoCopy()) {
@@ -434,7 +484,8 @@ const CapturePage: Component = () => {
       }
     } catch (err) {
       console.error('[Capture] OCR failed:', err)
-      setOcrText('')
+      setOcrText('OCR 失败，请重试')
+      window.alert(`OCR 失败：${String((err as any)?.message ?? err)}`)
     } finally {
       setOcrLoading(false)
     }
@@ -457,7 +508,7 @@ const CapturePage: Component = () => {
       if (!filePath) return
 
       const base64 = await blobToBase64(blob)
-      await invoke('save_capture_file', { path: filePath, image_data: base64 })
+      await invoke('save_capture_file', { path: filePath, imageData: base64 })
       handleCancel()
     } catch (err) {
       console.error('[Capture] Save failed:', err)
@@ -467,20 +518,29 @@ const CapturePage: Component = () => {
   const handlePin = async () => {
     try {
       const sel = selection()
-      const blob = await getSelectionBlob()
-      if (!sel || !blob) return
+      if (!sel) return
 
-      const base64 = await blobToBase64(blob)
-      await invoke('create_pin_window', {
-        image_data: base64,
-        width: Math.round(sel.w),
-        height: Math.round(sel.h),
+      // Improve perceived performance: immediately hide the fullscreen capture overlay.
+      // Backend will still use the last captured frame to crop and create the pin.
+      resetState()
+      try {
+        await invoke('hide_capture_window')
+      } catch {
+        // ignore
+      }
+
+      // Crop/encode in Rust based on the last captured frame (frontend sends only coords).
+      await invoke('create_pin_window_from_selection', {
         x: Math.round(sel.x),
         y: Math.round(sel.y),
+        width: Math.round(sel.w),
+        height: Math.round(sel.h),
+        viewportWidth: Math.round(window.innerWidth),
+        viewportHeight: Math.round(window.innerHeight),
       })
-      handleCancel()
     } catch (err) {
       console.error('[Capture] Pin failed:', err)
+      window.alert(`Pin 失败：${String((err as any)?.message ?? err)}`)
     }
   }
 
@@ -509,9 +569,7 @@ const CapturePage: Component = () => {
       <Show when={status() !== 'idle'}>
         <canvas
           ref={canvasRef}
-          class="absolute left-0 top-0"
-          width={window.innerWidth}
-          height={window.innerHeight}
+          class="absolute left-0 top-0 h-full w-full"
         />
       </Show>
 

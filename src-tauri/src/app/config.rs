@@ -63,6 +63,7 @@ pub struct IndexerConfig {
 pub struct ClipboardConfig {
     pub enabled: bool,
     pub history_limit: usize,
+    pub retention_days: usize,
     pub filter_sensitive: bool,
     pub exclude_apps: Vec<String>,
 }
@@ -142,6 +143,7 @@ impl Default for AppConfig {
             clipboard: ClipboardConfig {
                 enabled: true,
                 history_limit: 1000,
+                retention_days: 30,
                 filter_sensitive: true,
                 exclude_apps: vec![],
             },

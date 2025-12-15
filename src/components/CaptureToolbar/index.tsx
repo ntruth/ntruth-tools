@@ -84,16 +84,19 @@ const IconButton: Component<{
   active?: boolean
   disabled?: boolean
   primary?: boolean
+  danger?: boolean
   children: any
 }> = (props) => (
   <button
     class={
-      `group relative flex h-8 w-8 items-center justify-center rounded transition ` +
+      `group relative flex h-7 w-7 items-center justify-center rounded transition-all duration-150 ` +
       (props.primary
-        ? 'bg-blue-500 text-white hover:bg-blue-600'
-        : props.active
-          ? 'bg-white/15 text-white'
-          : 'text-white/85 hover:bg-white/10 hover:text-white') +
+        ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-sm'
+        : props.danger
+          ? 'bg-red-500/80 text-white hover:bg-red-600'
+          : props.active
+            ? 'bg-white/20 text-white shadow-inner'
+            : 'text-white/80 hover:bg-white/10 hover:text-white') +
       (props.disabled ? ' opacity-40 pointer-events-none' : '')
     }
     onClick={(e) => {
@@ -102,38 +105,40 @@ const IconButton: Component<{
     }}
     aria-label={props.label}
   >
-    <span class="h-4 w-4">{props.children}</span>
-    <span class="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-gray-900/95 px-2 py-0.5 text-[11px] text-white/90 opacity-0 shadow-lg backdrop-blur-sm border border-white/10 transition group-hover:opacity-100">
+    <span class="h-[14px] w-[14px]">{props.children}</span>
+    <span class="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/90 px-1.5 py-0.5 text-[10px] text-white/95 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
       {props.label}
     </span>
   </button>
 )
 
 const Icon: Component<{ path: string }> = (props) => (
-  <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d={props.path} />
   </svg>
 )
 
 const FilledIcon: Component<{ path: string }> = (props) => (
-  <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
+  <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="currentColor">
     <path d={props.path} />
   </svg>
 )
 
 const Divider: Component = () => (
-  <div class="h-5 w-px bg-white/20" />
+  <div class="mx-0.5 h-5 w-px bg-white/15" />
 )
 
 const SquareSwatch: Component<{
   color: string
   active?: boolean
   onClick: () => void
+  size?: 'sm' | 'md'
 }> = (props) => (
   <button
     class={
-      `h-4 w-4 border ` +
-      (props.active ? 'border-white' : 'border-white/20 hover:border-white/50')
+      `border transition-all ` +
+      (props.size === 'sm' ? 'h-3 w-3 ' : 'h-4 w-4 ') +
+      (props.active ? 'border-white scale-110 shadow-sm' : 'border-white/25 hover:border-white/60 hover:scale-105')
     }
     style={{ background: props.color }}
     onMouseDown={(e) => {
@@ -148,7 +153,7 @@ const MiniPopover: Component<{
   children: any
 }> = (props) => (
   <div
-    class="absolute bottom-9 left-0 z-50 rounded-md bg-gray-900/95 p-2 shadow-2xl backdrop-blur-sm border border-white/10"
+    class="absolute bottom-8 left-0 z-50 rounded-md bg-gray-900/98 p-2 shadow-2xl backdrop-blur-md border border-white/15"
     onMouseDown={(e) => e.stopPropagation()}
   >
     {props.children}
@@ -217,7 +222,7 @@ export const CaptureToolbar: Component<CaptureToolbarProps> = (props) => {
   return (
     <div
       data-capture-toolbar="true"
-      class="pointer-events-auto absolute z-50 flex flex-col rounded-lg bg-gray-900/95 px-2 py-1.5 shadow-2xl backdrop-blur-sm border border-white/10"
+      class="pointer-events-auto absolute z-50 flex flex-col rounded-lg bg-gray-900/98 px-1.5 py-1 shadow-2xl backdrop-blur-md border border-white/15"
       style={{
         top: `${position().top}px`,
         left: `${position().left}px`,
@@ -225,7 +230,7 @@ export const CaptureToolbar: Component<CaptureToolbarProps> = (props) => {
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* Top row: tools + actions */}
-      <div class="flex flex-wrap items-center gap-1">
+      <div class="flex flex-wrap items-center gap-0.5">
         <IconButton label="选择" active={props.tool === 'select'} onClick={() => props.onToolChange('select')} disabled={props.ocrLoading}>
           <Icon path="M3 3l7 18 2-7 7-2L3 3z" />
         </IconButton>
@@ -279,13 +284,13 @@ export const CaptureToolbar: Component<CaptureToolbarProps> = (props) => {
         <IconButton label="保存" onClick={props.onSave} primary disabled={props.ocrLoading}>
           <Icon path="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM7 21v-8h10v8" />
         </IconButton>
-        <IconButton label="取消" onClick={props.onCancel}>
+        <IconButton label="取消" onClick={props.onCancel} danger>
           <Icon path="M18 6L6 18M6 6l12 12" />
         </IconButton>
       </div>
 
-      {/* Bottom row: Snipaste 2.11-style inline settings */}
-      <div class="relative mt-1 flex w-full items-center gap-2 border-t border-white/10 pt-1">
+      {/* Bottom row: Snipaste-style inline settings */}
+      <div class="relative mt-1 flex w-full items-center gap-1.5 border-t border-white/10 pt-1">
         <div class="relative">
           <button
             class="flex h-7 items-center gap-1 rounded px-1.5 text-white/85 hover:bg-white/10"
@@ -488,9 +493,9 @@ export const CaptureToolbar: Component<CaptureToolbarProps> = (props) => {
           <div class="h-5 w-px bg-white/10" />
         </Show>
 
-        {/* Color: current + palette (always visible like Snipaste 2.11) */}
+        {/* Color: current + compact palette (Snipaste style) */}
         <div class="flex items-center gap-1">
-          <label class="relative h-6 w-6 cursor-pointer">
+          <label class="relative h-5 w-5 cursor-pointer">
             <input
               class="absolute inset-0 h-full w-full opacity-0"
               type="color"
@@ -501,21 +506,19 @@ export const CaptureToolbar: Component<CaptureToolbarProps> = (props) => {
               }}
               aria-label="pick color"
             />
-            <span class="absolute inset-0 border border-white/30" style={{ background: props.style.stroke }} />
+            <span class="absolute inset-0 border border-white/40 rounded-sm" style={{ background: props.style.stroke }} />
           </label>
 
-          <div class="mx-1 h-5 w-px bg-white/10" />
+          <div class="mx-0.5 h-4 w-px bg-white/10" />
 
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-0.5 flex-wrap max-w-[200px]">
             <For each={palette()}>
               {(c) => (
                 <SquareSwatch
                   color={c}
                   active={props.style.stroke === c}
-                  onClick={() => {
-                    // For fill row, Snipaste switches fill with separate button; here palette always changes stroke.
-                    onPickStroke(c)
-                  }}
+                  onClick={() => onPickStroke(c)}
+                  size="sm"
                 />
               )}
             </For>

@@ -23,6 +23,21 @@ const WINDOW_PADDING = 16         // p-2 on main container (8px * 2)
 export const MainPage: Component = () => {
   const currentWindow = getCurrentWindow()
 
+  // Programmatic window drag handler for transparent windows on Windows
+  const handleWindowDrag = async (e: MouseEvent) => {
+    // Only drag on left click
+    if (e.button !== 0) return
+    // Don't drag if clicking on interactive elements
+    const target = e.target as HTMLElement
+    if (target.closest('input, button, [data-tauri-drag-region="false"]')) return
+    // Start dragging
+    try {
+      await currentWindow.startDragging()
+    } catch {
+      // Ignore errors
+    }
+  }
+
   // State
   const [query, setQuery] = createSignal('')
   const [results, setResults] = createSignal<SearchResult[]>([])
@@ -417,7 +432,11 @@ export const MainPage: Component = () => {
   })
 
   return (
-    <div class="flex h-full w-full flex-col bg-transparent p-2">
+    <div 
+      class="flex h-full w-full flex-col bg-transparent p-2" 
+      data-tauri-drag-region
+      onMouseDown={handleWindowDrag}
+    >
       {/* Search Input - already has its own styling */}
       <div class="search-box-wrapper">
         <SearchInput
@@ -432,12 +451,14 @@ export const MainPage: Component = () => {
 
       {/* AI Chat View - Show when in AI mode */}
       <Show when={aiMode()}>
-        <div class="mt-2 max-h-96 overflow-y-auto rounded-xl bg-white/95 shadow-lg backdrop-blur-xl dark:bg-gray-900/95">
-          <AIChatView
-            queryId={aiQueryId()}
-            question={aiQuestion()}
-            isLoading={aiLoading()}
-          />
+        <div class="mt-2 max-h-96 overflow-y-auto rounded-xl bg-white/95 shadow-lg backdrop-blur-xl dark:bg-gray-900/95" data-tauri-drag-region>
+          <div data-tauri-drag-region="false">
+            <AIChatView
+              queryId={aiQueryId()}
+              question={aiQuestion()}
+              isLoading={aiLoading()}
+            />
+          </div>
         </div>
         <div class="mt-2 text-center text-xs text-gray-500">
           按 <kbd class="rounded bg-gray-200 px-1.5 py-0.5 dark:bg-gray-700">Esc</kbd> 退出 AI 模式
@@ -446,7 +467,7 @@ export const MainPage: Component = () => {
 
       {/* Results List - ONLY render when has actual results (no ghost container!) */}
       <Show when={showResults() && results().length > 0}>
-        <div class="mt-2 overflow-hidden rounded-xl bg-white/95 shadow-lg backdrop-blur-xl dark:bg-gray-900/95">
+        <div class="mt-2 overflow-hidden rounded-xl bg-white/95 shadow-lg backdrop-blur-xl dark:bg-gray-900/95" data-tauri-drag-region>
           <ResultList
             results={results()}
             selectedIndex={selectedIndex()}
