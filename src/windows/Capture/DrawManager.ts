@@ -904,6 +904,21 @@ export class DrawManager implements DrawManagerApi {
     area.addEventListener('mousedown', stop)
     area.addEventListener('input', autoResize)
 
+    // IME/composition support (Chinese/Japanese/Korean). Without this, Enter can
+    // prematurely commit/cancel while user is still composing.
+    let isComposing = false
+    const onCompositionStart = (e: Event) => {
+      isComposing = true
+      e.stopPropagation()
+    }
+    const onCompositionEnd = (e: Event) => {
+      isComposing = false
+      e.stopPropagation()
+      autoResize()
+    }
+    area.addEventListener('compositionstart', onCompositionStart)
+    area.addEventListener('compositionend', onCompositionEnd)
+
     const focusArea = () => {
       try {
         area.focus({ preventScroll: true } as any)
@@ -930,12 +945,15 @@ export class DrawManager implements DrawManagerApi {
     }
 
     let cleaned = false
+    const createdAt = performance.now()
     const cleanup = () => {
       if (cleaned) return
       cleaned = true
       area.removeEventListener('pointerdown', stop)
       area.removeEventListener('mousedown', stop)
       area.removeEventListener('input', autoResize)
+      area.removeEventListener('compositionstart', onCompositionStart)
+      area.removeEventListener('compositionend', onCompositionEnd)
       area.removeEventListener('keydown', onKeyDown)
       area.removeEventListener('blur', onBlur)
       if (area.parentElement) area.parentElement.removeChild(area)
@@ -980,6 +998,12 @@ export class DrawManager implements DrawManagerApi {
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
+      // Keep keystrokes inside the textarea; avoid canvas/global shortcuts.
+      e.stopPropagation()
+
+      // Let IME handle Enter/Escape while composing.
+      if (isComposing || (e as any).isComposing) return
+
       // Enter confirms, Ctrl+Enter or Shift+Enter for newline
       if (e.key === 'Enter') {
         if (e.ctrlKey || e.shiftKey) {
@@ -1003,7 +1027,18 @@ export class DrawManager implements DrawManagerApi {
       }
     }
 
-    const onBlur = () => finish()
+    const onBlur = () => {
+      // WebView2 sometimes blurs immediately after focus() or during IME.
+      // If this happens right after creation, try to refocus instead of finishing.
+      if (isComposing || (performance.now() - createdAt < 200 && area.value.trim().length === 0)) {
+        setTimeout(() => {
+          if (cleaned) return
+          focusArea()
+        }, 0)
+        return
+      }
+      finish()
+    }
 
     area.addEventListener('keydown', onKeyDown)
     area.addEventListener('blur', onBlur)

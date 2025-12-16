@@ -118,24 +118,13 @@ pub async fn toggle_main_window(state: State<'_, AppState>) -> AppResult<()> {
 pub async fn app_ready(window: tauri::Window) -> Result<(), String> {
     let label = window.label();
     tracing::info!("Frontend signaled ready for window: {}", label);
-    
-    // Only show the main launcher window on startup
-    // Other windows should remain hidden until user explicitly opens them
-    if label == "main" {
-        // Center the window first
-        window.center().map_err(|e| e.to_string())?;
-        
-        // Now show the window - UI is guaranteed to be rendered
-        window.show().map_err(|e| e.to_string())?;
-        
-        // Focus the window
-        window.set_focus().map_err(|e| e.to_string())?;
-        
-        tracing::info!("Main window shown after frontend ready");
-    } else {
-        // For non-main windows, just log that they're ready but keep them hidden
-        tracing::debug!("Window '{}' ready but staying hidden (will show on user action)", label);
-    }
+
+    // Keep windows hidden by default.
+    // Users open them explicitly via global shortcut or tray menu.
+    tracing::debug!(
+        "Window '{}' ready; staying hidden until user action",
+        label
+    );
     
     Ok(())
 }

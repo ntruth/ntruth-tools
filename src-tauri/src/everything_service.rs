@@ -10,8 +10,13 @@ use std::os::raw::{c_int, c_uint};
 use std::sync::OnceLock;
 
 use libloading::Library;
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use serde::Serialize;
 use tauri::Manager;
+
+// Everything SDK uses global process-wide state; serialize queries to avoid concurrent mutations.
+static EVERYTHING_QUERY_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FFI Type Definitions
@@ -375,6 +380,13 @@ fn get_display_path(path: &str, filename: &str) -> String {
 
 /// Initialize Everything DLL
 pub fn init_everything(app_handle: &tauri::AppHandle) -> Result<(), String> {
+    // Best-effort: keep Everything64.dll next to the exe for portable runs.
+    // If we can't write there (e.g., installed under Program Files), we still fall back to loading
+    // from resources or dev paths.
+    if let Err(e) = ensure_everything_dll_next_to_exe(app_handle) {
+        tracing::warn!("Failed to ensure Everything64.dll next to exe (continuing): {}", e);
+    }
+
     let dll_path = match resolve_dll_path(app_handle) {
         Ok(path) => path,
         Err(e) => {
@@ -397,6 +409,48 @@ pub fn init_everything(app_handle: &tauri::AppHandle) -> Result<(), String> {
         Some(Err(e)) => Err(e.clone()),
         None => Err("Failed to initialize Everything".to_string()),
     }
+}
+
+fn ensure_everything_dll_next_to_exe(app_handle: &tauri::AppHandle) -> Result<(), String> {
+    let exe_path = std::env::current_exe().map_err(|e| format!("current_exe failed: {}", e))?;
+    let exe_dir = exe_path
+        .parent()
+        .ok_or_else(|| "Failed to get exe directory".to_string())?;
+
+    let dest = exe_dir.join("Everything64.dll");
+    if dest.exists() {
+        return Ok(());
+    }
+
+    // Prefer bundled resources as source.
+    let mut candidates = Vec::new();
+    if let Ok(resource_path) = app_handle.path().resource_dir() {
+        candidates.push(resource_path.join("libs").join("Everything64.dll"));
+        candidates.push(resource_path.join("Everything64.dll"));
+    }
+
+    // Dev path (src-tauri/libs)
+    candidates.push(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("libs")
+            .join("Everything64.dll"),
+    );
+
+    // CWD fallbacks.
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join("libs").join("Everything64.dll"));
+        candidates.push(cwd.join("Everything64.dll"));
+    }
+
+    let src = candidates
+        .into_iter()
+        .find(|p| p.exists())
+        .ok_or_else(|| "No source Everything64.dll found to copy".to_string())?;
+
+    std::fs::copy(&src, &dest)
+        .map_err(|e| format!("Failed to copy {:?} -> {:?}: {}", src, dest, e))?;
+    tracing::info!("Copied Everything64.dll next to exe: {:?}", dest);
+    Ok(())
 }
 
 /// Resolve DLL path for both dev and production
@@ -517,6 +571,7 @@ pub async fn search_files(query: String, max_results: Option<u32>) -> Result<Vec
     // Run search in blocking thread with timeout (Everything API is synchronous)
     // Timeout is crucial because Everything IPC can hang if Everything.exe isn't running
     let search_future = tokio::task::spawn_blocking(move || {
+        let _guard = EVERYTHING_QUERY_LOCK.lock();
         match EVERYTHING.get() {
             Some(Ok(lib)) => lib.search(&smart_query, max),
             Some(Err(e)) => Err(e.clone()),

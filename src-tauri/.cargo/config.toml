@@ -17,3 +17,8 @@ retry = 3
 [http]
 timeout = 120
 multiplexing = false
+
+# 在每个项目的 src-tauri/.cargo/config.toml 中添加
+[build]
+# 指向全局共享的 target 目录（Windows 路径用 / 或 \\）
+target-dir = "D:/repository/tauri"

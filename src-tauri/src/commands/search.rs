@@ -1,5 +1,6 @@
 use crate::app::{error::AppResult, state::AppState};
 use crate::core::parser::{Parser, ParseResult, Calculator};
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use std::path::Path;
@@ -30,7 +31,7 @@ pub struct SearchAction {
 }
 
 /// Get app icon as base64 data URL (cached)
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 async fn get_app_icon(app_path: &Path, state: &State<'_, AppState>) -> Option<String> {
     // Try to get from cache first
     if let Some(cached) = state.icon_cache.get_icon(app_path).await {
@@ -47,41 +48,33 @@ async fn get_app_icon(app_path: &Path, state: &State<'_, AppState>) -> Option<St
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 async fn get_app_icon(_app_path: &Path, _state: &State<'_, AppState>) -> Option<String> {
     None
 }
 
-/// Get icon emoji based on file extension
-fn get_file_icon(path: &Path) -> &'static str {
-    let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-    match extension.to_lowercase().as_str() {
-        // Applications
-        "exe" | "msi" => "🚀",
-        "lnk" => "🔗",
-        // Documents
-        "pdf" => "📄",
-        "doc" | "docx" => "📝",
-        "xls" | "xlsx" => "📊",
-        "ppt" | "pptx" => "📽️",
-        "txt" | "md" | "rtf" => "📃",
-        // Images
-        "jpg" | "jpeg" | "png" | "gif" | "bmp" | "webp" | "svg" | "ico" => "🖼️",
-        // Audio
-        "mp3" | "wav" | "m4a" | "flac" | "ogg" | "wma" => "🎵",
-        // Video
-        "mp4" | "mov" | "avi" | "mkv" | "wmv" | "flv" | "webm" => "🎬",
-        // Archives
-        "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" => "📦",
-        // Code
-        "html" | "css" | "js" | "ts" | "jsx" | "tsx" => "💻",
-        "rs" | "py" | "java" | "c" | "cpp" | "h" | "go" => "🔧",
-        "json" | "xml" | "yaml" | "yml" | "toml" => "⚙️",
-        // Folders
-        "" => "📁",
-        // Default
-        _ => "📄",
+/// Get Windows system (Explorer) icon as base64 data URL (cached)
+#[cfg(windows)]
+async fn get_system_icon(path: &Path, state: &State<'_, AppState>) -> Option<String> {
+    if let Some(cached) = state.icon_cache.get_icon(path).await {
+        return Some(format!("data:image/png;base64,{}", cached));
     }
+
+    match crate::platform::windows::extract_file_icon(path).await {
+        Some(icon_data) => {
+            let _ = state.icon_cache.cache_icon(path, &icon_data).await;
+            Some(format!(
+                "data:image/png;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(&icon_data)
+            ))
+        }
+        None => None,
+    }
+}
+
+#[cfg(not(windows))]
+async fn get_system_icon(_path: &Path, _state: &State<'_, AppState>) -> Option<String> {
+    None
 }
 
 /// Check if a file is an application based on path and extension
@@ -115,93 +108,184 @@ fn is_application_smart(path: &str, extension: &str) -> bool {
 
 /// Search apps using AppIndexer (Rust indexer with pinyin support)
 #[cfg(windows)]
-fn search_apps_with_indexer(query: &str, indexer: &AppIndexer) -> Vec<SearchResult> {
+async fn search_apps_with_indexer(query: &str, indexer: &AppIndexer, state: &State<'_, AppState>) -> Vec<SearchResult> {
     let app_results = indexer.search(query, 20);
-    
-    app_results
-        .into_iter()
-        .enumerate()
-        .map(|(idx, result)| {
-            let path = std::path::Path::new(&result.entry.path);
-            let icon = if result.entry.extension == "lnk" { "🔗" } else { "🚀" };
-            
-            SearchResult {
-                id: format!("app-{}", idx),
-                r#type: "app".to_string(),
-                title: result.entry.name.clone(),
-                subtitle: Some(result.entry.path.clone()),
-                icon: Some(icon.to_string()),
-                path: Some(result.entry.path.clone()),
-                category: "Application".to_string(),
-                score: result.score as i32,
-                action: SearchAction {
-                    r#type: "open".to_string(),
-                    payload: Some(result.entry.path.clone()),
-                },
-            }
-        })
-        .collect()
+
+    let mut out = Vec::with_capacity(app_results.len());
+    for (idx, result) in app_results.into_iter().enumerate() {
+        let path_buf = std::path::PathBuf::from(&result.entry.path);
+        let icon_data_url = get_app_icon(&path_buf, state).await;
+        let fallback = if result.entry.extension == "lnk" { "🔗" } else { "🚀" };
+
+        out.push(SearchResult {
+            id: format!("app-{}", idx),
+            r#type: "app".to_string(),
+            title: result.entry.name.clone(),
+            subtitle: Some(result.entry.path.clone()),
+            icon: Some(icon_data_url.unwrap_or_else(|| fallback.to_string())),
+            path: Some(result.entry.path.clone()),
+            category: "Application".to_string(),
+            score: result.score as i32,
+            action: SearchAction {
+                r#type: "open".to_string(),
+                payload: Some(result.entry.path.clone()),
+            },
+        });
+    }
+
+    out
 }
 
 /// Search files using Everything (file search engine)
 #[cfg(windows)]
-async fn search_files_with_everything(query: &str) -> Vec<SearchResult> {
+async fn search_files_with_everything(query: &str, state: &State<'_, AppState>) -> Result<Vec<SearchResult>, String> {
     tracing::debug!("Searching files with Everything: {}", query);
     
     match everything_service::search_files(query.to_string(), Some(50)).await {
         Ok(file_results) => {
             tracing::debug!("Everything returned {} results", file_results.len());
             
-            file_results
-                .into_iter()
-                .enumerate()
-                .map(|(idx, result)| {
-                    let path = std::path::Path::new(&result.path);
-                    
-                    // Use the smart category from Everything service
-                    let is_app = result.category == "Application";
-                    
-                    let icon = if is_app { "🚀" } else { get_file_icon(path) };
-                    let result_type = if is_app {
-                        "app"
-                    } else if result.is_folder { 
-                        "folder" 
-                    } else { 
-                        "file" 
-                    };
-                    
-                    // Use file stem for apps, full filename for others
-                    let title = if is_app {
-                        path.file_stem()
-                            .and_then(|n| n.to_str())
-                            .unwrap_or(&result.filename)
-                            .to_string()
-                    } else {
-                        result.filename.clone()
-                    };
-                    
-                    SearchResult {
-                        id: format!("file-{}", idx),
-                        r#type: result_type.to_string(),
-                        title,
-                        subtitle: Some(result.display_path.clone()), // Use display_path for cleaner UI
-                        icon: Some(icon.to_string()),
-                        path: Some(result.path.clone()),
-                        category: result.category.clone(), // Use pre-computed category
-                        score: if is_app { 2000 - idx as i32 } else { 1000 - idx as i32 },
-                        action: SearchAction {
-                            r#type: "open".to_string(),
-                            payload: Some(result.path.clone()),
-                        },
-                    }
-                })
-                .collect()
+            let mut out = Vec::with_capacity(file_results.len());
+            for (idx, result) in file_results.into_iter().enumerate() {
+                let path = std::path::Path::new(&result.path);
+
+                // Use the smart category from Everything service
+                let is_app = result.category == "Application";
+
+                let result_type = if is_app {
+                    "app"
+                } else if result.is_folder {
+                    "folder"
+                } else {
+                    "file"
+                };
+
+                // Use file stem for apps, full filename for others
+                let title = if is_app {
+                    path.file_stem()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(&result.filename)
+                        .to_string()
+                } else {
+                    result.filename.clone()
+                };
+
+                let icon = if is_app {
+                    get_app_icon(path, state).await
+                } else {
+                    get_system_icon(path, state).await
+                };
+
+                out.push(SearchResult {
+                    id: format!("file-{}", idx),
+                    r#type: result_type.to_string(),
+                    title,
+                    subtitle: Some(result.display_path.clone()),
+                    icon,
+                    path: Some(result.path.clone()),
+                    category: result.category.clone(),
+                    score: if is_app { 2000 - idx as i32 } else { 1000 - idx as i32 },
+                    action: SearchAction {
+                        r#type: "open".to_string(),
+                        payload: Some(result.path.clone()),
+                    },
+                });
+            }
+
+            Ok(out)
         }
         Err(e) => {
             tracing::error!("Everything search failed: {}", e);
-            Vec::new()
+            Err(e)
         }
     }
+}
+
+/// Fallback search for Desktop items when Everything is unavailable.
+/// This is intentionally shallow (non-recursive) and limited to a small number of results.
+#[cfg(windows)]
+async fn fallback_search_desktop(query: &str, state: &State<'_, AppState>) -> Vec<SearchResult> {
+    use tokio::fs;
+
+    let q = query.trim();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let q_lower = q.to_lowercase();
+
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+
+    // Standard desktop
+    if let Some(user_profile) = std::env::var_os("USERPROFILE") {
+        candidates.push(std::path::PathBuf::from(user_profile).join("Desktop"));
+    }
+    // Public desktop
+    if let Some(public) = std::env::var_os("PUBLIC") {
+        candidates.push(std::path::PathBuf::from(public).join("Desktop"));
+    }
+    // OneDrive redirected desktop (common on Win11)
+    if let Some(onedrive) = std::env::var_os("OneDrive") {
+        candidates.push(std::path::PathBuf::from(onedrive).join("Desktop"));
+    }
+    if let Some(onedrive) = std::env::var_os("OneDriveConsumer") {
+        candidates.push(std::path::PathBuf::from(onedrive).join("Desktop"));
+    }
+
+    // De-dup
+    candidates.sort();
+    candidates.dedup();
+
+    let mut out: Vec<SearchResult> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    for dir in candidates {
+        let mut rd = match fs::read_dir(&dir).await {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        while let Ok(Some(entry)) = rd.next_entry().await {
+            if out.len() >= 30 {
+                break;
+            }
+            let path = entry.path();
+
+            let name = match path.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+
+            if !name.to_lowercase().contains(&q_lower) {
+                continue;
+            }
+
+            let full = path.to_string_lossy().to_string();
+            let key = full.to_lowercase();
+            if !seen.insert(key) {
+                continue;
+            }
+
+            let is_folder = entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false);
+            let icon = get_system_icon(&path, state).await;
+
+            out.push(SearchResult {
+                id: format!("desktop-{}", out.len()),
+                r#type: if is_folder { "folder".to_string() } else { "file".to_string() },
+                title: name,
+                subtitle: Some(full.clone()),
+                icon,
+                path: Some(full.clone()),
+                category: "File".to_string(),
+                score: 900 - out.len() as i32,
+                action: SearchAction {
+                    r#type: "open".to_string(),
+                    payload: Some(full),
+                },
+            });
+        }
+    }
+
+    out
 }
 
 /// Hybrid search: Apps (Rust indexer) + Files (Everything)
@@ -211,10 +295,51 @@ async fn hybrid_search(query: &str, state: &State<'_, AppState>) -> Vec<SearchRe
     tracing::info!("Hybrid search for: {}", query);
     
     // Run both searches
-    let app_results = search_apps_with_indexer(query, &state.app_indexer);
+    let app_results = search_apps_with_indexer(query, &state.app_indexer, state).await;
     tracing::debug!("AppIndexer returned {} results", app_results.len());
     
-    let file_results = search_files_with_everything(query).await;
+    let mut file_results = match search_files_with_everything(query, state).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!("Everything unavailable, falling back to Desktop scan: {}", e);
+            Vec::new()
+        }
+    };
+
+    if file_results.is_empty() {
+        // Desktop fallback helps when Everything.exe isn't running or indexing isn't ready.
+        let desktop = fallback_search_desktop(query, state).await;
+        if !desktop.is_empty() {
+            tracing::debug!("Desktop fallback returned {} results", desktop.len());
+            file_results.extend(desktop);
+        }
+    }
+
+    // For Everything results that are classified as applications, try to replace emoji with real icons.
+    // Keep it lightweight: only attempt for the first few app-like results.
+    let mut upgraded = 0usize;
+    for r in file_results.iter_mut() {
+        if upgraded >= 12 {
+            break;
+        }
+        if r.category != "Application" {
+            continue;
+        }
+        if r
+            .icon
+            .as_deref()
+            .is_some_and(|v| v.starts_with("data:image/"))
+        {
+            continue;
+        }
+        if let Some(ref p) = r.path {
+            let pb = std::path::PathBuf::from(p);
+            if let Some(icon) = get_app_icon(&pb, state).await {
+                r.icon = Some(icon);
+                upgraded += 1;
+            }
+        }
+    }
     tracing::debug!("Everything returned {} results", file_results.len());
     
     // Collect paths from app results for deduplication

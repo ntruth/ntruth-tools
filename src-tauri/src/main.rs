@@ -22,24 +22,37 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter,
 };
+use tauri::path::BaseDirectory;
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+#[derive(Debug, Default, Clone, Copy)]
+struct MainShowState {
+    shown_at: Option<Instant>,
+    focused_at: Option<Instant>,
+}
+
+static MAIN_SHOW_STATE: Lazy<Mutex<MainShowState>> = Lazy::new(|| Mutex::new(MainShowState::default()));
+const MAIN_SHOW_BLUR_GRACE_NO_FOCUS: Duration = Duration::from_millis(2000);
+const MAIN_FOCUS_TO_BLUR_GRACE: Duration = Duration::from_millis(250);
+
+static LAST_MAIN_SHORTCUT_AT: Lazy<Mutex<Option<Instant>>> = Lazy::new(|| Mutex::new(None));
+const MAIN_SHORTCUT_DEBOUNCE: Duration = Duration::from_millis(350);
 
 fn main() {
     // Initialize logger
     utils::logger::init_simple_logger();
 
     fn launcher_autohide_enabled() -> bool {
-        // In dev, default OFF to avoid annoying debug workflow.
-        // Enable in dev by setting: OMNIBOX_AUTOHIDE_ON_BLUR=1
-        // In release, default ON; disable via: OMNIBOX_AUTOHIDE_ON_BLUR=0
+        // Default ON (both dev & release) to match launcher UX.
+        // Disable via: OMNIBOX_AUTOHIDE_ON_BLUR=0
         let v = std::env::var("OMNIBOX_AUTOHIDE_ON_BLUR").ok();
         let explicit = v.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty());
 
-        if cfg!(debug_assertions) {
-            return matches!(explicit, Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES"));
-        }
-
-        // release
         match explicit {
             Some("0") | Some("false") | Some("FALSE") | Some("no") | Some("NO") => false,
             _ => true,
@@ -67,11 +80,39 @@ fn main() {
 
             // Auto-hide launcher (main window only) when it loses focus.
             // DO NOT apply to clipboard or other windows!
-            if let tauri::WindowEvent::Focused(false) = event {
+            if let tauri::WindowEvent::Focused(focused) = event {
                 let label = window.label();
-                if label == "main" && launcher_autohide_enabled() {
-                    let _ = window.hide();
+                if label != "main" || !launcher_autohide_enabled() {
+                    return;
                 }
+
+                if *focused {
+                    if let Ok(mut st) = MAIN_SHOW_STATE.lock() {
+                        st.focused_at = Some(Instant::now());
+                    }
+                    return;
+                }
+
+                // Focus lost.
+                // On Windows (especially with transparent windows), focus can flap during show or
+                // during programmatic resize. We only auto-hide once the window has actually been
+                // focused at least once since it was shown.
+                if let Ok(st) = MAIN_SHOW_STATE.lock() {
+                    if let Some(shown_at) = st.shown_at {
+                        if st.focused_at.is_none() && shown_at.elapsed() < MAIN_SHOW_BLUR_GRACE_NO_FOCUS {
+                            // Never actually focused: ignore this transient blur.
+                            return;
+                        }
+                        if let Some(focused_at) = st.focused_at {
+                            if focused_at.elapsed() < MAIN_FOCUS_TO_BLUR_GRACE {
+                                // Just focused then immediately blurred: likely transient.
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                let _ = window.hide();
             }
         })
         .setup(|app| {
@@ -98,6 +139,18 @@ fn main() {
                 let app_handle = app.handle().clone();
                 if let Err(e) = everything_service::init_everything(&app_handle) {
                     tracing::warn!("Everything search not available: {}", e);
+
+                    // If the DLL is missing (or couldn't be loaded), remind the user what to install/copy.
+                    // Keep it non-fatal so the rest of the app still works.
+                    let e_lower = e.to_lowercase();
+                    if e_lower.contains("everything64.dll") {
+                        let message = "未能加载 Everything 搜索组件（Everything64.dll）。\n\n请将 Everything64.dll 放到程序目录（与 OmniBox.exe 同级），然后重启 OmniBox。\n\n提示：开发环境也可放在 src-tauri/libs/。";
+                        app_handle
+                            .dialog()
+                            .message(message)
+                            .title("Everything 未就绪")
+                            .show(|_| {});
+                    }
                 } else {
                     tracing::info!("Everything search initialized successfully");
                 }
@@ -141,41 +194,6 @@ fn main() {
             tracing::info!("Setup complete, waiting for frontend ready signal");
             
             Ok(())
-        })
-        .on_window_event(|window, event| {
-            // Launcher UX: hide when it loses focus.
-            // Dev-mode guard: disabled by default in debug builds, enable by setting env `OMNIBOX_BLUR_HIDE=1`.
-            if window.label() != "main" {
-                return;
-            }
-
-            if let tauri::WindowEvent::Focused(focused) = event {
-                if *focused {
-                    return;
-                }
-
-                let enabled = if cfg!(debug_assertions) {
-                    matches!(
-                        std::env::var("OMNIBOX_BLUR_HIDE")
-                            .unwrap_or_default()
-                            .to_ascii_lowercase()
-                            .as_str(),
-                        "1" | "true" | "yes" | "on"
-                    )
-                } else {
-                    !matches!(
-                        std::env::var("OMNIBOX_BLUR_HIDE")
-                            .unwrap_or_else(|_| "1".to_string())
-                            .to_ascii_lowercase()
-                            .as_str(),
-                        "0" | "false" | "no" | "off"
-                    )
-                };
-
-                if enabled {
-                    let _ = window.hide();
-                }
-            }
         })
         .invoke_handler(tauri::generate_handler![
             // Search commands (uses hybrid search: AppIndexer + Everything)
@@ -276,13 +294,19 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
     // Get app handle for event handlers
     let app_handle_for_menu = app.handle().clone();
     
-    // Load tray icon - use the default window icon from tauri.conf.json
-    // In Tauri 2.0, this is the most reliable way to get the bundled icon
-    let tray_icon = app.default_window_icon()
-        .cloned()
-        .ok_or("No default window icon configured in tauri.conf.json")?;
+    // Load tray icon.
+    // Prefer an explicit bundled icon file (avoids the default blue placeholder icon),
+    // then fall back to Tauri's default_window_icon.
+    let tray_icon = app
+        .path()
+        .resolve("icons/icon.ico", BaseDirectory::Resource)
+        .ok()
+        .and_then(|p| tauri::image::Image::from_path(p).ok())
+        .map(|i| i.to_owned())
+        .or_else(|| app.default_window_icon().cloned())
+        .ok_or("No tray icon available (missing bundled icon)")?;
     
-    tracing::info!("Loading tray icon from default_window_icon");
+    tracing::info!("Tray icon loaded");
     
     // Build tray icon
     let _tray = TrayIconBuilder::new()
@@ -373,7 +397,18 @@ fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error:
     
     // Register main window shortcut (Alt+Space)
     app.global_shortcut().on_shortcut(main_shortcut, move |_app, _shortcut, _event| {
-        toggle_window(&app_handle_main, "main");
+        // On Windows, the hotkey can sometimes fire twice (repeat / key state quirks).
+        // The launcher UX expects: hotkey always SHOWS (tray can toggle).
+        if let Ok(mut last) = LAST_MAIN_SHORTCUT_AT.lock() {
+            if let Some(t0) = *last {
+                if t0.elapsed() < MAIN_SHORTCUT_DEBOUNCE {
+                    return;
+                }
+            }
+            *last = Some(Instant::now());
+        }
+
+        show_window(&app_handle_main, "main");
     })?;
     
     // Register clipboard shortcut (Ctrl+Shift+V)
@@ -410,33 +445,62 @@ fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error:
 // WINDOW MANAGEMENT HELPERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Show window (no toggle) with proper sizing/focus for main window.
+/// This is used for global shortcuts to avoid double-trigger toggling it back off.
+fn show_window(app_handle: &tauri::AppHandle, label: &str) {
+    if let Some(window) = app_handle.get_webview_window(label) {
+        // For main window, ensure correct size before showing
+        if label == "main" {
+            let _ = window.set_size(tauri::LogicalSize::new(680.0, 60.0));
+            if let Ok(mut st) = MAIN_SHOW_STATE.lock() {
+                *st = MainShowState {
+                    shown_at: Some(Instant::now()),
+                    focused_at: None,
+                };
+            }
+        }
+
+        if label != "main" {
+            let _ = window.center();
+        }
+
+        let _ = window.show();
+        let _ = window.set_focus();
+
+        if label == "main" {
+            let win = window.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(50));
+                let _ = win.set_focus();
+                std::thread::sleep(Duration::from_millis(150));
+                let _ = win.set_focus();
+                std::thread::sleep(Duration::from_millis(300));
+                let _ = win.set_focus();
+            });
+        }
+
+        if label == "clipboard" {
+            let win = window.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(50));
+                let _ = win.set_focus();
+            });
+        }
+    }
+}
+
 /// Toggle window visibility with proper sizing for main window
 fn toggle_window(app_handle: &tauri::AppHandle, label: &str) {
     if let Some(window) = app_handle.get_webview_window(label) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
-        } else {
-            // For main window, ensure correct size before showing
             if label == "main" {
-                // Reset to search-bar-only size (will expand when results appear)
-                let _ = window.set_size(tauri::LogicalSize::new(680.0, 60.0));
+                if let Ok(mut st) = MAIN_SHOW_STATE.lock() {
+                    *st = MainShowState::default();
+                }
             }
-            // Do NOT force center for the launcher; users can drag it.
-            if label != "main" {
-                let _ = window.center();
-            }
-            let _ = window.show();
-            let _ = window.set_focus();
-            
-            // For clipboard window, retry focus after a short delay
-            // (Windows transparent windows can be finicky with focus)
-            if label == "clipboard" {
-                let win = window.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                    let _ = win.set_focus();
-                });
-            }
+        } else {
+            show_window(app_handle, label);
         }
     }
 }

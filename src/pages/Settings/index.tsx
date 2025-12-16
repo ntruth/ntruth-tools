@@ -54,6 +54,7 @@ export interface AppConfig {
   clipboard: {
     enabled: boolean
     history_limit: number
+    retention_days: number
     filter_sensitive: boolean
     exclude_apps: string[]
   }
@@ -220,6 +221,7 @@ const SettingsPage: Component = () => {
           config={{
             enabled: config()!.clipboard.enabled,
             history_limit: config()!.clipboard.history_limit,
+            retention_days: config()!.clipboard.retention_days,
             filter_sensitive: config()!.clipboard.filter_sensitive,
             exclude_apps: config()!.clipboard.exclude_apps,
           }}
