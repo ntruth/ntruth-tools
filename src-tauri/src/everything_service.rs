@@ -556,6 +556,8 @@ fn build_smart_query(input: &str) -> String {
 }
 
 /// Search files using Everything
+/// 
+/// Includes retry logic for IPC errors which can occur transiently.
 pub async fn search_files(query: String, max_results: Option<u32>) -> Result<Vec<FileSearchResult>, String> {
     let max = max_results.unwrap_or(50);
     
@@ -566,47 +568,84 @@ pub async fn search_files(query: String, max_results: Option<u32>) -> Result<Vec
         return Ok(Vec::new());
     }
     
-    tracing::debug!("Everything query: {} -> {}", query, smart_query);
+    tracing::debug!("Everything query: '{}' -> '{}'", query, smart_query);
     
-    // Run search in blocking thread with timeout (Everything API is synchronous)
-    // Timeout is crucial because Everything IPC can hang if Everything.exe isn't running
-    let search_future = tokio::task::spawn_blocking(move || {
-        let _guard = EVERYTHING_QUERY_LOCK.lock();
-        match EVERYTHING.get() {
-            Some(Ok(lib)) => lib.search(&smart_query, max),
-            Some(Err(e)) => Err(e.clone()),
-            None => Err("Everything not initialized".to_string()),
+    // Retry configuration: Everything IPC can fail transiently
+    const MAX_RETRIES: u32 = 2;
+    const RETRY_DELAY_MS: u64 = 50;
+    
+    let mut last_error: Option<String> = None;
+    
+    for attempt in 0..=MAX_RETRIES {
+        if attempt > 0 {
+            tracing::debug!("Everything search retry attempt {}", attempt);
+            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
         }
-    });
-    
-    // Apply 2 second timeout - if Everything hangs, return empty results
-    let result = match tokio::time::timeout(std::time::Duration::from_secs(2), search_future).await {
-        Ok(Ok(res)) => res,
-        Ok(Err(e)) => {
-            tracing::error!("Everything search task failed: {}", e);
-            return Ok(Vec::new());
+        
+        let query_clone = smart_query.clone();
+        
+        // Run search in blocking thread with timeout (Everything API is synchronous)
+        let search_future = tokio::task::spawn_blocking(move || {
+            let _guard = EVERYTHING_QUERY_LOCK.lock();
+            match EVERYTHING.get() {
+                Some(Ok(lib)) => lib.search(&query_clone, max),
+                Some(Err(e)) => Err(e.clone()),
+                None => Err("Everything not initialized".to_string()),
+            }
+        });
+        
+        // Apply 3 second timeout - enough for large result sets
+        let result = match tokio::time::timeout(std::time::Duration::from_secs(3), search_future).await {
+            Ok(Ok(res)) => res,
+            Ok(Err(e)) => {
+                tracing::error!("Everything search task panicked: {}", e);
+                last_error = Some(format!("Task error: {}", e));
+                continue;
+            }
+            Err(_) => {
+                tracing::warn!("Everything search timed out (attempt {})", attempt);
+                last_error = Some("Search timed out - is Everything.exe running?".to_string());
+                continue;
+            }
+        };
+        
+        match result {
+            Ok(results) => {
+                tracing::debug!("Everything returned {} raw results", results.len());
+                
+                // Filter out undesirable results
+                let filtered: Vec<FileSearchResult> = results
+                    .into_iter()
+                    .filter(|r| {
+                        let name_lower = r.filename.to_lowercase();
+                        // Skip uninstallers
+                        !name_lower.contains("uninstall") 
+                            && !name_lower.contains("卸载")
+                            // Skip system/temp files
+                            && !r.path.contains("$Recycle.Bin")
+                            && !r.path.contains("System Volume Information")
+                    })
+                    .collect();
+                
+                tracing::debug!("Everything returning {} filtered results", filtered.len());
+                return Ok(filtered);
+            }
+            Err(e) => {
+                // IPC error is retriable
+                if e.contains("IPC") {
+                    tracing::warn!("Everything IPC error (attempt {}): {}", attempt, e);
+                    last_error = Some(e);
+                    continue;
+                }
+                // Other errors are not retriable
+                tracing::error!("Everything search error: {}", e);
+                return Err(e);
+            }
         }
-        Err(_) => {
-            tracing::warn!("Everything search timed out - is Everything.exe running?");
-            return Ok(Vec::new());
-        }
-    };
+    }
     
-    // Filter out undesirable results
-    let filtered: Vec<FileSearchResult> = result?
-        .into_iter()
-        .filter(|r| {
-            let name_lower = r.filename.to_lowercase();
-            // Skip uninstallers
-            !name_lower.contains("uninstall") 
-                && !name_lower.contains("卸载")
-                // Skip system/temp files
-                && !r.path.contains("$Recycle.Bin")
-                && !r.path.contains("System Volume Information")
-        })
-        .collect();
-    
-    Ok(filtered)
+    // All retries exhausted
+    Err(last_error.unwrap_or_else(|| "Everything search failed after retries".to_string()))
 }
 
 /// Check if Everything is available

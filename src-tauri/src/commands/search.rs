@@ -292,26 +292,45 @@ async fn fallback_search_desktop(query: &str, state: &State<'_, AppState>) -> Ve
 /// Apps always appear before files, with deduplication
 #[cfg(windows)]
 async fn hybrid_search(query: &str, state: &State<'_, AppState>) -> Vec<SearchResult> {
-    tracing::info!("Hybrid search for: {}", query);
+    tracing::info!("Hybrid search for: '{}'", query);
     
     // Run both searches
     let app_results = search_apps_with_indexer(query, &state.app_indexer, state).await;
     tracing::debug!("AppIndexer returned {} results", app_results.len());
     
-    let mut file_results = match search_files_with_everything(query, state).await {
-        Ok(v) => v,
+    let mut file_results = Vec::new();
+    let mut everything_failed = false;
+    
+    match search_files_with_everything(query, state).await {
+        Ok(v) => {
+            tracing::debug!("Everything returned {} file results", v.len());
+            file_results = v;
+        }
         Err(e) => {
-            tracing::warn!("Everything unavailable, falling back to Desktop scan: {}", e);
-            Vec::new()
+            tracing::warn!("Everything search failed: {}", e);
+            everything_failed = true;
         }
     };
 
-    if file_results.is_empty() {
-        // Desktop fallback helps when Everything.exe isn't running or indexing isn't ready.
+    // Desktop fallback when Everything fails OR returns empty results
+    // This helps when Everything.exe isn't running, indexing isn't ready, or file is only on Desktop.
+    if file_results.is_empty() || everything_failed {
         let desktop = fallback_search_desktop(query, state).await;
         if !desktop.is_empty() {
             tracing::debug!("Desktop fallback returned {} results", desktop.len());
-            file_results.extend(desktop);
+            // Merge desktop results (avoid duplicates)
+            let existing_paths: std::collections::HashSet<String> = file_results
+                .iter()
+                .filter_map(|r| r.path.clone())
+                .map(|p| p.to_lowercase())
+                .collect();
+            for r in desktop {
+                if let Some(ref p) = r.path {
+                    if !existing_paths.contains(&p.to_lowercase()) {
+                        file_results.push(r);
+                    }
+                }
+            }
         }
     }
 

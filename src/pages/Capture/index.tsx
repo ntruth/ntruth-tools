@@ -1,5 +1,5 @@
 import { Component, Show, createSignal, createEffect, onCleanup, onMount, createMemo } from 'solid-js'
-import { invoke } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { save } from '@tauri-apps/plugin-dialog'
 import { CaptureToolbar, type Selection } from '../../components/CaptureToolbar'
@@ -11,7 +11,8 @@ import OCRResult from '../../windows/Capture/OCRResult'
 type CaptureStatus = 'idle' | 'capturing' | 'selecting' | 'editing'
 
 interface CaptureData {
-  data: string
+  data?: string
+  path?: string
   width: number
   height: number
 }
@@ -152,7 +153,11 @@ const CapturePage: Component = () => {
         console.error('[Capture] Failed to load image:', e)
         setStatus('idle')
       }
-      img.src = `data:image/png;base64,${event.payload.data}`
+      if (event.payload.path) {
+        img.src = convertFileSrc(event.payload.path)
+      } else {
+        img.src = `data:image/png;base64,${event.payload.data ?? ''}`
+      }
     })
 
     // Listen for reset event (when window is hidden and re-shown)
@@ -520,8 +525,16 @@ const CapturePage: Component = () => {
       const sel = selection()
       if (!sel) return
 
+      // Export the selected region including annotations.
+      // Use pixelRatio=1 for PIN to keep it fast and responsive (PIN window matches selection size).
+      const api = annotationApi()
+      const blob = api
+        ? await api.exportBlob({ pixelRatio: 1 })
+        : await getSelectionBlob()
+      if (!blob) return
+      const base64 = await blobToBase64(blob)
+
       // Improve perceived performance: immediately hide the fullscreen capture overlay.
-      // Backend will still use the last captured frame to crop and create the pin.
       resetState()
       try {
         await invoke('hide_capture_window')
@@ -529,14 +542,13 @@ const CapturePage: Component = () => {
         // ignore
       }
 
-      // Crop/encode in Rust based on the last captured frame (frontend sends only coords).
-      await invoke('create_pin_window_from_selection', {
-        x: Math.round(sel.x),
-        y: Math.round(sel.y),
+      // Create the pin directly from the exported image (already cropped + annotated).
+      await invoke('create_pin_window', {
+        imageData: base64,
         width: Math.round(sel.w),
         height: Math.round(sel.h),
-        viewportWidth: Math.round(window.innerWidth),
-        viewportHeight: Math.round(window.innerHeight),
+        x: Math.round(sel.x),
+        y: Math.round(sel.y),
       })
     } catch (err) {
       console.error('[Capture] Pin failed:', err)

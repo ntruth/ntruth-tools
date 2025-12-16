@@ -295,14 +295,39 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
     let app_handle_for_menu = app.handle().clone();
     
     // Load tray icon.
-    // Prefer an explicit bundled icon file (avoids the default blue placeholder icon),
-    // then fall back to Tauri's default_window_icon.
-    let tray_icon = app
-        .path()
-        .resolve("icons/icon.ico", BaseDirectory::Resource)
-        .ok()
-        .and_then(|p| tauri::image::Image::from_path(p).ok())
-        .map(|i| i.to_owned())
+    // Requirement: use tools.png as the tray/status-bar icon, but prefer tray-optimized sizes.
+    // Order is platform + DPI aware, with safe fallbacks.
+    let scale_factor = app
+        .get_webview_window("main")
+        .and_then(|w| w.scale_factor().ok())
+        .unwrap_or(1.0);
+
+    // Most trays are effectively 16px @ 1.0 scale, 32px @ 2.0 scale.
+    let prefer_32 = scale_factor >= 1.5;
+
+    // macOS status bar tends to look better with a larger source image (it will be downscaled).
+    let prefer_32 = if cfg!(target_os = "macos") { true } else { prefer_32 };
+
+    let mut candidates: Vec<&str> = Vec::new();
+    if prefer_32 {
+        candidates.push("icons/tools-32.png");
+        candidates.push("icons/tools-16.png");
+    } else {
+        candidates.push("icons/tools-16.png");
+        candidates.push("icons/tools-32.png");
+    }
+    candidates.push("icons/tools.png");
+    candidates.push("icons/icon.ico");
+
+    let tray_icon = candidates
+        .into_iter()
+        .find_map(|rel| {
+            app.path()
+                .resolve(rel, BaseDirectory::Resource)
+                .ok()
+                .and_then(|p| tauri::image::Image::from_path(p).ok())
+                .map(|i| i.to_owned())
+        })
         .or_else(|| app.default_window_icon().cloned())
         .ok_or("No tray icon available (missing bundled icon)")?;
     
@@ -429,6 +454,7 @@ fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error:
     // Register capture shortcut: Ctrl+Alt+X (all platforms)
     let capture_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyX);
     app.global_shortcut().on_shortcut(capture_shortcut, move |_app, _shortcut, _event| {
+        tracing::info!("Capture shortcut triggered (Ctrl+Alt+X)");
         let app_handle_capture = app_handle_capture.clone();
         tauri::async_runtime::spawn(async move {
             if let Err(e) = capture::init_capture(app_handle_capture).await {
