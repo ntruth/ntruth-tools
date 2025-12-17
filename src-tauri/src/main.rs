@@ -251,6 +251,7 @@ fn main() {
             // Capture commands
             capture::init_capture,
             capture::capture_frontend_ready,
+            capture::is_capture_ready,
             capture::save_capture,
             capture::save_capture_file,
             capture::copy_capture_base64,
@@ -451,19 +452,47 @@ fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error:
         show_settings_window(&app_handle_settings);
     })?;
 
-    // Register capture shortcut: Ctrl+Alt+X (all platforms)
-    let capture_shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyX);
-    app.global_shortcut().on_shortcut(capture_shortcut, move |_app, _shortcut, _event| {
-        tracing::info!("Capture shortcut triggered (Ctrl+Alt+X)");
+    // Register multiple capture shortcuts for robustness (some combos may be occupied by system/other apps)
+    let capture_shortcuts = vec![
+        ("PrintScreen", Shortcut::new(None, Code::PrintScreen)),
+        ("Ctrl+Alt+X", Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyX)),
+        ("Ctrl+Shift+S", Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyS)),
+    ];
+
+    let mut capture_registered = false;
+    for (label, sc) in capture_shortcuts {
         let app_handle_capture = app_handle_capture.clone();
-        tauri::async_runtime::spawn(async move {
-            if let Err(e) = capture::init_capture(app_handle_capture).await {
-                tracing::error!("Capture init failed: {e}");
+        match app.global_shortcut().on_shortcut(sc, move |_app, _shortcut, _event| {
+            tracing::info!("Capture shortcut triggered ({})", label);
+            let app_handle_capture = app_handle_capture.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = capture::init_capture(app_handle_capture).await {
+                    tracing::error!("Capture init failed: {e}");
+                }
+            });
+        }) {
+            Ok(_) => {
+                capture_registered = true;
+                tracing::info!("Capture shortcut registered: {}", label);
             }
-        });
-    })?;
+            Err(e) => {
+                tracing::warn!("Failed to register capture shortcut {}: {}", label, e);
+            }
+        }
+    }
+    if !capture_registered {
+        tracing::error!("No capture shortcuts registered. Check for OS/global shortcut conflicts.");
+    }
     
     tracing::info!("Global shortcuts registered: Alt+Space (main), Ctrl+Alt+V (clipboard), Alt+, (settings), Ctrl+Alt+X (capture)");
+
+    // Warm up capture webview so the first hotkey can show immediately.
+    {
+        let app_handle = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+            omnibox::commands::capture::warmup_capture_window(&app_handle).await;
+        });
+    }
     Ok(())
 }
 

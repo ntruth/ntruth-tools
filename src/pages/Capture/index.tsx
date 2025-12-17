@@ -113,6 +113,13 @@ const CapturePage: Component = () => {
 
   onMount(async () => {
     console.log('[Capture] Page mounted, status:', status())
+    
+    // IMPORTANT: Signal backend IMMEDIATELY that we're alive
+    // Don't wait for listeners to be set up - backend needs to know ASAP
+    invoke('capture_frontend_ready').catch(err => {
+      console.warn('[Capture] capture_frontend_ready failed:', err)
+    })
+    
     window.addEventListener('keydown', onKeyDown)
 
     const syncCanvasSize = () => {
@@ -165,15 +172,6 @@ const CapturePage: Component = () => {
       console.log('[Capture] Reset event received')
       resetState()
     })
-
-    // Important: signal backend only AFTER listeners are registered.
-    // This prevents missing the first capture:ready event when capture is triggered
-    // before the capture webview finishes loading.
-    try {
-      await invoke('capture_frontend_ready')
-    } catch (err) {
-      console.warn('[Capture] capture_frontend_ready failed:', err)
-    }
 
     onCleanup(() => {
       console.log('[Capture] Cleaning up...')

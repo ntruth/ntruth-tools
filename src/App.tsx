@@ -15,10 +15,23 @@ const App: Component = () => {
   const [_clipboardMode, setClipboardMode] = createSignal(false)
   let unlistenClipboard: UnlistenFn | null = null
   
+  // Log immediately which window this is
+  console.log('App component initializing, window label:', currentWindow.label)
+  
   onMount(async () => {
     // Get window label to determine which component to render
     const label = currentWindow.label
     console.log('Window label:', label)
+    
+    // For capture window, signal ready IMMEDIATELY (don't wait for anything)
+    if (label === 'capture') {
+      console.log('[App] Capture window detected, signaling frontend ready...')
+      invoke('capture_frontend_ready').then(() => {
+        console.log('[App] capture_frontend_ready succeeded')
+      }).catch(err => {
+        console.error('[App] capture_frontend_ready failed:', err)
+      })
+    }
     
     // Listen for clipboard toggle event from Rust (global shortcut)
     unlistenClipboard = await listen('toggle-clipboard-history', () => {
