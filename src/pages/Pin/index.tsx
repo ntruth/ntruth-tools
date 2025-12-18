@@ -1,19 +1,27 @@
-import { Component, createSignal, onMount, Show } from 'solid-js'
+import { Component, createSignal, onMount, onCleanup, Show } from 'solid-js'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
+import { LogicalSize } from '@tauri-apps/api/dpi'
 
 /**
- * PinPage - A floating screenshot window that can be dragged around
+ * PinPage - A floating screenshot window with advanced interactions
  * 
- * Query params:
- * - data: base64 encoded PNG image
- * - w: width
- * - h: height
+ * Features:
+ * - Scroll wheel: Scale window (0.1x - 5x)
+ * - Ctrl + Scroll: Adjust opacity (10% - 100%)
+ * - Ctrl + T: Toggle click-through mode
+ * - Double-click: Close window
+ * - Drag: Move window
  */
 const PinPage: Component = () => {
   const [imageUrl, setImageUrl] = createSignal<string>('')
+  const [scale, setScale] = createSignal(1)
+  const [opacity, setOpacity] = createSignal(1)
+  const [isClickThrough, setIsClickThrough] = createSignal(false)
+  const [originalSize, setOriginalSize] = createSignal({ width: 100, height: 100 })
   
+  let imageRef: HTMLImageElement | undefined
   const currentWindow = getCurrentWebviewWindow()
 
   onMount(() => {
@@ -26,6 +34,7 @@ const PinPage: Component = () => {
     console.log('[Pin] Mounting with params:', { w, h, dataLength: data?.length })
     
     if (data) setImageUrl(`data:image/png;base64,${data}`)
+    if (w && h) setOriginalSize({ width: parseInt(w), height: parseInt(h) })
 
     // Also support event-based payload (preferred)
     const unlistenPromise = listen<{ data: string }>('pin:set_image', (event) => {
@@ -43,22 +52,37 @@ const PinPage: Component = () => {
         })
         if (payload?.data) {
           setImageUrl(`data:image/png;base64,${payload.data}`)
+          setOriginalSize({ width: payload.width, height: payload.height })
         }
       } catch (e) {
         console.warn('[Pin] get_pin_payload failed:', e)
       }
     })()
 
+    // Keyboard shortcuts
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (e.ctrlKey && (e.key === 't' || e.key === 'T')) {
+        e.preventDefault()
+        await toggleClickThrough()
+      }
+      if (e.key === 'Escape') {
+        await closeSelf()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+
     // Cleanup
     unlistenPromise.then((unlisten) => {
-      // Pin window lives long; still clean on unload
       window.addEventListener('beforeunload', () => unlisten())
+    })
+    
+    onCleanup(() => {
+      window.removeEventListener('keydown', handleKeyDown)
     })
   })
 
   const closeSelf = async () => {
     try {
-      // Prefer backend close (most reliable across platforms)
       await invoke('close_pin_window', { label: currentWindow.label })
       return
     } catch (err) {
@@ -72,40 +96,77 @@ const PinPage: Component = () => {
     }
   }
 
+  const toggleClickThrough = async () => {
+    const newState = !isClickThrough()
+    setIsClickThrough(newState)
+    try {
+      await currentWindow.setIgnoreCursorEvents(newState)
+      console.log('[Pin] Click-through:', newState)
+    } catch (err) {
+      console.warn('[Pin] setIgnoreCursorEvents failed:', err)
+    }
+  }
+
+  const handleWheel = async (e: WheelEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (e.ctrlKey) {
+      // Ctrl + Wheel: Adjust opacity
+      const delta = e.deltaY > 0 ? -0.1 : 0.1
+      const newOpacity = Math.max(0.1, Math.min(1, opacity() + delta))
+      setOpacity(newOpacity)
+      
+      if (imageRef) {
+        imageRef.style.opacity = newOpacity.toString()
+      }
+      console.log('[Pin] Opacity:', newOpacity.toFixed(1))
+    } else {
+      // Wheel: Adjust scale
+      const delta = e.deltaY > 0 ? 0.9 : 1.1
+      const newScale = Math.max(0.1, Math.min(5, scale() * delta))
+      setScale(newScale)
+      
+      const newWidth = Math.round(originalSize().width * newScale)
+      const newHeight = Math.round(originalSize().height * newScale)
+      
+      try {
+        await currentWindow.setSize(new LogicalSize(newWidth, newHeight))
+        console.log('[Pin] Scale:', newScale.toFixed(2), 'Size:', newWidth, 'x', newHeight)
+      } catch (err) {
+        console.warn('[Pin] setSize failed:', err)
+      }
+    }
+  }
+
   const handleDoubleClick = async (e: MouseEvent) => {
     e.stopPropagation()
     await closeSelf()
   }
 
   const handlePointerDown = async (e: PointerEvent) => {
-    // Left button only
     if ((e as any).button !== 0) return
-
-    // Don't drag when interacting with toolbar/buttons
     const target = e.target as HTMLElement | null
     if (target?.closest?.('[data-pin-toolbar="true"]')) return
 
     try {
       await currentWindow.startDragging()
     } catch {
-      // ignore (some platforms/contexts may not support)
+      // ignore
     }
   }
 
-  // Close pin window
   const handleClose = async (e: MouseEvent) => {
     e.stopPropagation()
     await closeSelf()
   }
 
-  // Copy image to clipboard
   const handleCopy = async (e: MouseEvent) => {
     e.stopPropagation()
     const img = imageUrl()
     if (!img) return
     
     try {
-      // Get the image data and copy to clipboard
       const response = await fetch(img)
       const blob = await response.blob()
       await navigator.clipboard.write([
@@ -117,29 +178,47 @@ const PinPage: Component = () => {
     }
   }
 
+  const handleToggleClickThrough = async (e: MouseEvent) => {
+    e.stopPropagation()
+    await toggleClickThrough()
+  }
+
   return (
     <div
       class="group relative h-full w-full cursor-move select-none overflow-hidden bg-transparent"
       data-tauri-drag-region
       onDblClick={handleDoubleClick}
       onPointerDown={handlePointerDown}
+      onWheel={handleWheel}
     >
-      {/*
-        Windows transparent windows can become "click-through" when the surface is fully transparent.
-        This near-invisible background keeps hit-testing reliable without affecting appearance.
-      */}
+      {/* Near-invisible background for hit-testing on transparent windows */}
       <div class="absolute inset-0" style={{ background: 'rgba(0,0,0,0.01)' }} />
 
       {/* Image */}
       <Show when={imageUrl()}>
         <img
+          ref={imageRef}
           src={imageUrl()}
           alt="Pinned screenshot"
-          class="h-full w-full object-contain"
+          class="h-full w-full object-contain transition-opacity duration-150"
           draggable={false}
           onDblClick={handleDoubleClick}
         />
       </Show>
+
+      {/* Click-through indicator */}
+      <Show when={isClickThrough()}>
+        <div class="absolute left-1 top-1 rounded bg-yellow-500/80 px-1.5 py-0.5 text-xs font-medium text-black">
+          穿透模式
+        </div>
+      </Show>
+
+      {/* Status bar - scale and opacity */}
+      <div class="absolute bottom-1 left-1 flex gap-2 rounded bg-black/60 px-2 py-0.5 text-xs text-white/80 opacity-0 transition-opacity group-hover:opacity-100">
+        <span>{Math.round(scale() * 100)}%</span>
+        <span>·</span>
+        <span>透明度 {Math.round(opacity() * 100)}%</span>
+      </div>
 
       {/* Toolbar - visible on hover */}
       <div
@@ -147,6 +226,21 @@ const PinPage: Component = () => {
         data-tauri-drag-region="false"
         data-pin-toolbar="true"
       >
+        {/* Toggle click-through */}
+        <button
+          class={`flex h-6 w-6 items-center justify-center rounded transition-colors ${
+            isClickThrough() 
+              ? 'bg-yellow-500/80 text-black' 
+              : 'text-white/80 hover:bg-white/20 hover:text-white'
+          }`}
+          onClick={handleToggleClickThrough}
+          title="切换鼠标穿透 (Ctrl+T)"
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+          </svg>
+        </button>
+        
         {/* Copy button */}
         <button
           class="flex h-6 w-6 items-center justify-center rounded text-white/80 hover:bg-white/20 hover:text-white"
@@ -172,6 +266,13 @@ const PinPage: Component = () => {
 
       {/* Border effect on hover */}
       <div class="pointer-events-none absolute inset-0 rounded border-2 border-transparent transition-colors group-hover:border-blue-400/50" />
+      
+      {/* Resize hint on corners */}
+      <div class="pointer-events-none absolute bottom-0 right-0 h-3 w-3 opacity-0 transition-opacity group-hover:opacity-50">
+        <svg class="h-full w-full text-white" viewBox="0 0 12 12">
+          <path fill="currentColor" d="M12 0v12H0L12 0z"/>
+        </svg>
+      </div>
     </div>
   )
 }

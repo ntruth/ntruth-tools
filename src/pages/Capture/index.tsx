@@ -15,9 +15,19 @@ interface CaptureData {
   path?: string
   width: number
   height: number
+  monitorX?: number  // Window screen X offset (for multi-monitor)
+  monitorY?: number  // Window screen Y offset (for multi-monitor)
+}
+
+interface ElementRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
 }
 
 const MIN_SELECTION_SIZE = 10 // Minimum selection size to trigger editing mode
+const ELEMENT_DETECT_THROTTLE = 50 // ms between UI element detection requests
 
 const CapturePage: Component = () => {
   // State
@@ -62,6 +72,13 @@ const CapturePage: Component = () => {
   const [ocrLoading, setOcrLoading] = createSignal(false)
   const [ocrText, setOcrText] = createSignal('')
   const [ocrPreviewSrc, setOcrPreviewSrc] = createSignal('')
+
+  // UI Element auto-detection
+  const [elementRect, setElementRect] = createSignal<ElementRect | null>(null)
+  const [autoDetectEnabled, setAutoDetectEnabled] = createSignal(true)
+  const [monitorOffset, setMonitorOffset] = createSignal({ x: 0, y: 0 })  // Window screen position
+  let lastDetectTime = 0
+  let detectPending = false
 
   // Refs
   let canvasRef: HTMLCanvasElement | undefined
@@ -140,7 +157,15 @@ const CapturePage: Component = () => {
 
     // Listen for capture:ready event from backend
     const unlisten = await listen<CaptureData>('capture:ready', (event) => {
-      console.log('[Capture] Received capture:ready event:', event.payload.width, 'x', event.payload.height)
+      console.log('[Capture] Received capture:ready event:', event.payload.width, 'x', event.payload.height,
+        'monitor offset:', event.payload.monitorX, event.payload.monitorY,
+        'has data:', !!event.payload.data, 'has path:', !!event.payload.path)
+
+      // Store monitor offset for coordinate conversion
+      setMonitorOffset({ 
+        x: event.payload.monitorX ?? 0, 
+        y: event.payload.monitorY ?? 0 
+      })
 
       // Fresh capture: clear any previous selection/overlay state first.
       setSelection(null)
@@ -148,22 +173,36 @@ const CapturePage: Component = () => {
       setAnnotationApi(null)
       setAnnotationTool('select')
       setIsDragging(false)
+      setElementRect(null)
       setStatus('capturing')
       
       const img = new Image()
       img.onload = () => {
-        console.log('[Capture] Image loaded:', img.width, 'x', img.height)
+        console.log('[Capture] Image loaded successfully:', img.width, 'x', img.height)
         setBgImage(img)
         setStatus('selecting')
+        // Force redraw
+        if (canvasRef) {
+          drawCanvas(img)
+        }
       }
       img.onerror = (e) => {
         console.error('[Capture] Failed to load image:', e)
         setStatus('idle')
       }
-      if (event.payload.path) {
-        img.src = convertFileSrc(event.payload.path)
+      
+      // Build image source
+      if (event.payload.data) {
+        const src = `data:image/png;base64,${event.payload.data}`
+        console.log('[Capture] Loading from base64, length:', event.payload.data.length)
+        img.src = src
+      } else if (event.payload.path) {
+        const src = convertFileSrc(event.payload.path)
+        console.log('[Capture] Loading from path:', src)
+        img.src = src
       } else {
-        img.src = `data:image/png;base64,${event.payload.data ?? ''}`
+        console.error('[Capture] No image data in payload!')
+        setStatus('idle')
       }
     })
 
@@ -189,6 +228,7 @@ const CapturePage: Component = () => {
     setAnnotationTool('select')
     setAnnotationApi(null)
     setStatus('idle')
+    setElementRect(null) // Clear UI element highlight
     // Clear canvases
     if (canvasRef) {
       const ctx = canvasRef.getContext('2d')
@@ -197,6 +237,17 @@ const CapturePage: Component = () => {
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
+    // Toggle auto-detect with 'A' key
+    if (e.key === 'a' || e.key === 'A') {
+      if (status() === 'selecting' && !isDragging()) {
+        setAutoDetectEnabled(prev => !prev)
+        if (!autoDetectEnabled()) {
+          setElementRect(null)
+        }
+        return
+      }
+    }
+    
     if (e.key === 'Escape') {
       if (ocrOpen()) {
         setOcrOpen(false)
@@ -209,27 +260,38 @@ const CapturePage: Component = () => {
 
   const drawCanvas = (image: HTMLImageElement) => {
     const canvas = canvasRef
-    if (!canvas) return
+    if (!canvas) {
+      console.error('[Capture] drawCanvas: canvas ref is null!')
+      return
+    }
 
     const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    if (!ctx) {
+      console.error('[Capture] drawCanvas: failed to get 2d context!')
+      return
+    }
 
     const dpr = window.devicePixelRatio || 1
-    canvas.width = Math.max(1, Math.round(window.innerWidth * dpr))
-    canvas.height = Math.max(1, Math.round(window.innerHeight * dpr))
-    canvas.style.width = `${window.innerWidth}px`
-    canvas.style.height = `${window.innerHeight}px`
+    const w = window.innerWidth
+    const h = window.innerHeight
+    
+    console.log('[Capture] drawCanvas:', { w, h, dpr, imgW: image.width, imgH: image.height })
+    
+    canvas.width = Math.max(1, Math.round(w * dpr))
+    canvas.height = Math.max(1, Math.round(h * dpr))
+    canvas.style.width = `${w}px`
+    canvas.style.height = `${h}px`
 
     // Draw using CSS pixels
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
     // Draw background image
-    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight)
-    ctx.drawImage(image, 0, 0, window.innerWidth, window.innerHeight)
+    ctx.clearRect(0, 0, w, h)
+    ctx.drawImage(image, 0, 0, w, h)
 
     // Draw dark overlay
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
-    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
+    ctx.fillRect(0, 0, w, h)
 
     // Cut out selection area
     const sel = selection()
@@ -301,12 +363,26 @@ const CapturePage: Component = () => {
       return
     }
 
+    // If clicking on a detected UI element, use it as selection
+    const elem = elementRect()
+    if (elem && autoDetectEnabled() && !isDragging()) {
+      const elemWidth = elem.right - elem.left
+      const elemHeight = elem.bottom - elem.top
+      if (elemWidth >= MIN_SELECTION_SIZE && elemHeight >= MIN_SELECTION_SIZE) {
+        setSelection({ x: elem.left, y: elem.top, w: elemWidth, h: elemHeight })
+        setStatus('editing')
+        setElementRect(null)
+        return
+      }
+    }
+
     const x = e.clientX
     const y = e.clientY
     setStartPoint({ x, y })
     setSelection({ x, y, w: 0, h: 0 })
     setStatus('selecting')
     setIsDragging(true)
+    setElementRect(null) // Clear element highlight when starting manual selection
 
     // Ensure mouseup finalizes selection even if the pointer ends outside the window.
     const onWindowMouseUp = () => onMouseUp()
@@ -317,9 +393,61 @@ const CapturePage: Component = () => {
     return x >= sel.x && x <= sel.x + sel.w && y >= sel.y && y <= sel.y + sel.h
   }
 
+  // Throttled UI element detection
+  const detectElementAt = async (screenX: number, screenY: number) => {
+    const now = Date.now()
+    if (now - lastDetectTime < ELEMENT_DETECT_THROTTLE || detectPending) return
+    
+    // Convert screen coordinates to window-local coordinates for comparison
+    const offset = monitorOffset()
+    const localX = screenX - offset.x
+    const localY = screenY - offset.y
+    
+    // Smart detection: skip if mouse is still inside current element (using local coords)
+    const current = elementRect()
+    if (current && localX >= current.left && localX < current.right && 
+        localY >= current.top && localY < current.bottom) {
+      return
+    }
+    
+    lastDetectTime = now
+    detectPending = true
+    
+    try {
+      const rect = await invoke<ElementRect | null>('get_element_rect_at', { x: screenX, y: screenY })
+      if (rect && rect.right > rect.left && rect.bottom > rect.top) {
+        // Convert screen coordinates to window-local coordinates
+        // The elementRect needs to be in window coordinates for rendering
+        setElementRect({
+          left: rect.left - offset.x,
+          top: rect.top - offset.y,
+          right: rect.right - offset.x,
+          bottom: rect.bottom - offset.y,
+        })
+      } else {
+        setElementRect(null)
+      }
+    } catch (err) {
+      // Silently ignore errors (e.g., when not on Windows)
+      console.debug('[Capture] Element detection failed:', err)
+    } finally {
+      detectPending = false
+    }
+  }
+
   const onMouseMove = (e: MouseEvent) => {
     if (ocrOpen() || ocrLoading()) return
-    if (status() !== 'selecting' || !isDragging()) return
+    
+    const st = status()
+    
+    // UI element auto-detection when not dragging
+    if (st === 'selecting' && !isDragging() && autoDetectEnabled()) {
+      // Get screen coordinates (approximate - assumes window is at screen origin)
+      // For accurate detection, we'd need the window position from Rust
+      detectElementAt(e.screenX, e.screenY)
+    }
+    
+    if (st !== 'selecting' || !isDragging()) return
     
     const x = e.clientX
     const y = e.clientY
@@ -570,7 +698,7 @@ const CapturePage: Component = () => {
 
   return (
     <div
-      class={`relative h-screen w-screen select-none overflow-hidden ${cursorClass()}`}
+      class={`relative h-screen w-screen select-none overflow-hidden bg-black ${cursorClass()}`}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
@@ -606,6 +734,31 @@ const CapturePage: Component = () => {
             }}
           />
         </div>
+      </Show>
+
+      {/* UI Element auto-detection highlight */}
+      <Show when={status() === 'selecting' && !isDragging() && elementRect() && autoDetectEnabled()}>
+        {(() => {
+          const rect = elementRect()!
+          const width = rect.right - rect.left
+          const height = rect.bottom - rect.top
+          return (
+            <div
+              class="pointer-events-none absolute border-2 border-green-400 bg-green-400/10"
+              style={{
+                left: `${rect.left}px`,
+                top: `${rect.top}px`,
+                width: `${width}px`,
+                height: `${height}px`,
+              }}
+            >
+              {/* Size indicator for detected element */}
+              <div class="absolute -top-6 left-0 rounded bg-green-600/90 px-1.5 py-0.5 text-xs text-white font-mono">
+                {width} × {height}
+              </div>
+            </div>
+          )
+        })()}
       </Show>
 
       {/* Annotation tools toolbar */}

@@ -268,20 +268,20 @@ pub async fn init_capture(app: tauri::AppHandle) -> AppResult<()> {
         file_path: file_path.clone(),
     });
 
-    // Build payload
-    let payload = if let Some(p) = file_path.as_ref().and_then(|p| p.to_str()) {
-        serde_json::json!({
-            "path": p,
-            "width": width,
-            "height": height,
-        })
-    } else {
-        serde_json::json!({
-            "data": BASE64.encode(&png_bytes),
-            "width": width,
-            "height": height,
-        })
-    };
+    // Build payload - include monitor position for coordinate conversion
+    // Always send base64 data for reliability (convertFileSrc can have issues)
+    let payload = serde_json::json!({
+        "data": BASE64.encode(&png_bytes),
+        "width": width,
+        "height": height,
+        "monitorX": mon_x,
+        "monitorY": mon_y,
+    });
+
+    // Also save to file for debugging (optional)
+    if let Some(p) = file_path.as_ref() {
+        tracing::info!("Capture also saved to: {:?}", p);
+    }
 
     // Step 3: Emit capture data BEFORE showing window
     // This ensures frontend has the image ready to render
@@ -317,7 +317,18 @@ pub async fn init_capture(app: tauri::AppHandle) -> AppResult<()> {
         let _ = win.set_decorations(false);
         let _ = win.set_always_on_top(true);
         let _ = win.set_ignore_cursor_events(false);
+        
+        // Multiple focus attempts - Windows transparent windows need this
         let _ = win.set_focus();
+        
+        // Spawn a background task to retry focus (Windows can be stubborn)
+        let win_clone = win.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let _ = win_clone.set_focus();
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let _ = win_clone.set_focus();
+        });
 
         // Log actual window state
         let actual_pos = win.outer_position().ok();

@@ -43,6 +43,14 @@ const MAIN_FOCUS_TO_BLUR_GRACE: Duration = Duration::from_millis(250);
 static LAST_MAIN_SHORTCUT_AT: Lazy<Mutex<Option<Instant>>> = Lazy::new(|| Mutex::new(None));
 const MAIN_SHORTCUT_DEBOUNCE: Duration = Duration::from_millis(350);
 
+// Clipboard shortcut debounce to prevent double-trigger
+static LAST_CLIPBOARD_SHORTCUT_AT: Lazy<Mutex<Option<Instant>>> = Lazy::new(|| Mutex::new(None));
+const CLIPBOARD_SHORTCUT_DEBOUNCE: Duration = Duration::from_millis(400);
+
+// Capture shortcut debounce - more aggressive due to rapid repeats observed
+static LAST_CAPTURE_SHORTCUT_AT: Lazy<Mutex<Option<Instant>>> = Lazy::new(|| Mutex::new(None));
+const CAPTURE_SHORTCUT_DEBOUNCE: Duration = Duration::from_millis(500);
+
 fn main() {
     // Initialize logger
     utils::logger::init_simple_logger();
@@ -266,6 +274,8 @@ fn main() {
 
             // UI Automation
             automation::get_element_rect_at,
+            automation::get_element_info_at,
+            automation::get_element_rects_batch,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -437,10 +447,21 @@ fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error:
         show_window(&app_handle_main, "main");
     })?;
     
-    // Register clipboard shortcut (Ctrl+Shift+V)
+    // Register clipboard shortcut (Ctrl+Alt+V)
     // This also emits an event to frontend for UI state change
     app.global_shortcut().on_shortcut(clipboard_shortcut, move |_app, _shortcut, _event| {
-        tracing::debug!("Clipboard shortcut triggered");
+        // Debounce: Windows hotkey can fire twice rapidly
+        if let Ok(mut last) = LAST_CLIPBOARD_SHORTCUT_AT.lock() {
+            if let Some(t0) = *last {
+                if t0.elapsed() < CLIPBOARD_SHORTCUT_DEBOUNCE {
+                    tracing::debug!("Clipboard shortcut debounced");
+                    return;
+                }
+            }
+            *last = Some(Instant::now());
+        }
+        
+        tracing::info!("Clipboard shortcut triggered");
         // Toggle clipboard window
         toggle_window(&app_handle_clipboard, "clipboard");
         // Also emit event to frontend
@@ -462,8 +483,20 @@ fn register_global_shortcuts(app: &tauri::App) -> Result<(), Box<dyn std::error:
     let mut capture_registered = false;
     for (label, sc) in capture_shortcuts {
         let app_handle_capture = app_handle_capture.clone();
+        let label_owned = label.to_string();
         match app.global_shortcut().on_shortcut(sc, move |_app, _shortcut, _event| {
-            tracing::info!("Capture shortcut triggered ({})", label);
+            // Aggressive debounce: Windows can fire global hotkeys many times per second
+            if let Ok(mut last) = LAST_CAPTURE_SHORTCUT_AT.lock() {
+                if let Some(t0) = *last {
+                    if t0.elapsed() < CAPTURE_SHORTCUT_DEBOUNCE {
+                        tracing::trace!("Capture shortcut debounced ({})", label_owned);
+                        return;
+                    }
+                }
+                *last = Some(Instant::now());
+            }
+            
+            tracing::info!("Capture shortcut triggered ({})", label_owned);
             let app_handle_capture = app_handle_capture.clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = capture::init_capture(app_handle_capture).await {
@@ -537,7 +570,12 @@ fn show_window(app_handle: &tauri::AppHandle, label: &str) {
         if label == "clipboard" {
             let win = window.clone();
             std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(50));
+                // Multiple focus attempts to combat Windows transparent window focus issues
+                std::thread::sleep(Duration::from_millis(30));
+                let _ = win.set_focus();
+                std::thread::sleep(Duration::from_millis(80));
+                let _ = win.set_focus();
+                std::thread::sleep(Duration::from_millis(150));
                 let _ = win.set_focus();
             });
         }

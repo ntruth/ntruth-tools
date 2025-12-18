@@ -95,19 +95,19 @@
         "label": "capture",
         "title": "Screen Capture",
         "url": "/capture",
-        "visible": true,
-        "transparent": true,
+        "visible": false,
+        "transparent": false,
         "decorations": false,
-        "alwaysOnTop": false,
+        "alwaysOnTop": true,
         "fullscreen": false,
         "skipTaskbar": true,
         "resizable": false,
         "shadow": false,
-        "focus": false,
+        "focus": true,
         "width": 800,
         "height": 600,
-        "x": 15000,
-        "y": 15000
+        "x": -10000,
+        "y": -10000
       }
     ]
   },
